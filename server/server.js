@@ -1,296 +1,467 @@
+// smart3/smart/server/server.js
+console.log("👉 Running THIS server.js from smart3/smart/server");
+
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const bodyParser = require('body-parser');
+const { Pool } = require('pg');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+// 👇 run backend on 5000 (not 3000)
+const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  // 👇 allow both 3000 and 3001 (React may choose 3001)
+  origin: ['http://localhost:3000', 'http://localhost:3001'],
+  credentials: true
+}));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Baserow API Configuration
-const BASEROW_BASE_URL = process.env.BASEROW_BASE_URL;
-const DATABASE_ID = process.env.BASEROW_DATABASE_ID;
-const BASEROW_TOKEN = process.env.BASEROW_TOKEN;
-const COMMITTEE_PASSWORD = process.env.COMMITTEE_PASSWORD;
+// PostgreSQL Connection Pool
+const pool = new Pool({
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+});
 
-// Axios instance for Baserow API
-const baserowAPI = axios.create({
-  baseURL: `${BASEROW_BASE_URL}/database/rows/table/`,
-  headers: {
-    'Authorization': `Token ${BASEROW_TOKEN}`,
-    'Content-Type': 'application/json'
+// Test database connection
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('❌ Error connecting to PostgreSQL database:', err.stack);
+  } else {
+    console.log('✅ Successfully connected to PostgreSQL database');
+    release();
   }
 });
 
-// Helper function to get table URL
-const getTableUrl = (tableName) => {
-  const tableIds = {
-    'users': 1,
-    'courses': 2,
-    'elective_courses': 3,
-    'course_schedules': 4,
-    'student_courses': 5,
-    'votes': 6,
-    'notifications': 7,
-    'schedule_versions': 8,
-    'schedule_details': 9
-  };
-  return `${tableIds[tableName]}/?database_id=${DATABASE_ID}`;
+// Middleware to verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' });
+    }
+    req.user = user;
+    next();
+  });
 };
 
 // Middleware to verify committee access
+// Middleware to verify committee access
 const verifyCommittee = (req, res, next) => {
-  const { password } = req.body;
-  if (password !== COMMITTEE_PASSWORD) {
+  const { password, committeePassword } = req.body;
+  const pwd = committeePassword || password; // Accept either
+  
+  if (pwd !== process.env.COMMITTEE_PASSWORD) {
     return res.status(401).json({ error: 'كلمة المرور غير صحيحة، غير مسموح بالدخول.' });
   }
   next();
 };
 
-// Routes
+// ============================================
+// AUTHENTICATION ROUTES
+// ============================================
 
-// Authentication Routes
+// Login endpoint - handles both users and students
 app.post('/api/auth/login', async (req, res) => {
+  const client = await pool.connect();
   try {
     const { email, password } = req.body;
 
-    // Get user from Baserow (simplified - in real implementation, you'd hash/compare passwords)
-    const response = await baserowAPI.get(getTableUrl('users'));
-    const users = response.data.results;
-    const user = users.find(u => u.email === email);
-
-    if (!user) {
-      return res.status(401).json({ error: 'بيانات الدخول غير صحيحة' });
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.user_role },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    // Check if it's a user (faculty/staff)
+    const userQuery = 'SELECT * FROM users WHERE email = $1';
+    const userResult = await client.query(userQuery, [email]);
 
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        full_name: user.full_name,
-        role: user.user_role,
-        level: user.level,
-        faculty: user.faculty
+    if (userResult.rows.length > 0) {
+      const user = userResult.rows[0];
+
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'بيانات الدخول غير صحيحة' });
       }
-    });
+
+      const token = jwt.sign(
+        { id: user.user_id, email: user.email, role: user.role, type: 'user' },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      return res.json({
+        token,
+        user: {
+          id: user.user_id,
+          email: user.email,
+          full_name: user.name,
+          role: user.role,
+          type: 'user'
+        }
+      });
+    }
+
+    // Check if it's a student
+    const studentQuery = `
+      SELECT s.student_id, s.is_ir, s.level, u.user_id, u.email, u.name, u.password
+      FROM students s
+      JOIN users u ON s.user_id = u.user_id
+      WHERE u.email = $1
+    `;
+    const studentResult = await client.query(studentQuery, [email]);
+
+    if (studentResult.rows.length > 0) {
+      const student = studentResult.rows[0];
+
+      const isValidPassword = await bcrypt.compare(password, student.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'بيانات الدخول غير صحيحة' });
+      }
+
+      const token = jwt.sign(
+        { id: student.student_id, user_id: student.user_id, email: student.email, type: 'student' },
+        process.env.JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      return res.json({
+        token,
+        user: {
+          id: student.student_id,
+          user_id: student.user_id,
+          email: student.email,
+          full_name: student.name,
+          level: student.level,
+          is_ir: student.is_ir,
+          type: 'student'
+        }
+      });
+    }
+
+    // No user or student found
+    return res.status(401).json({ error: 'بيانات الدخول غير صحيحة' });
+
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'خطأ في الخادم' });
+  } finally {
+    client.release();
   }
 });
 
-// Elective Courses Routes
-app.get('/api/elective-courses', async (req, res) => {
+// Register new user (faculty/staff)
+app.post('/api/auth/register-user', verifyCommittee, async (req, res) => {
+  const client = await pool.connect();
   try {
-    const response = await baserowAPI.get(getTableUrl('elective_courses'));
-    res.json(response.data.results);
+    const { email, password, name, role } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const query = `
+      INSERT INTO users (email, password, name, role)
+      VALUES ($1, $2, $3, $4)
+      RETURNING user_id, email, name, role
+    `;
+    const result = await client.query(query, [email, hashedPassword, name, role]);
+
+    res.json({ success: true, message: 'تمت إضافة المستخدم بنجاح!', user: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching elective courses:', error);
-    res.status(500).json({ error: 'خطأ في جلب المقررات الاختيارية' });
-  }
-});
-
-app.post('/api/elective-courses', verifyCommittee, async (req, res) => {
-  try {
-    const { course_name, course_code, credits, has_lab, has_exercise, faculty, time_slots } = req.body;
-
-    // Create elective course
-    const courseData = {
-      course_name,
-      course_code,
-      credits,
-      has_lab,
-      has_exercise,
-      faculty
-    };
-
-    const courseResponse = await baserowAPI.post(getTableUrl('elective_courses'), courseData);
-    const courseId = courseResponse.data.id;
-
-    // Create time slots for the course
-    if (time_slots && time_slots.length > 0) {
-      const schedulePromises = time_slots.map(slot =>
-        baserowAPI.post(getTableUrl('course_schedules'), {
-          elective_course_id: courseId,
-          day_of_week: slot.day,
-          start_time: slot.start_time,
-          end_time: slot.end_time
-        })
-      );
-
-      await Promise.all(schedulePromises);
+    await client.query('ROLLBACK').catch(()=>{});
+    console.error('Error creating user:', error);
+    if (error.code === '23505') {
+      res.status(400).json({ error: 'البريد الإلكتروني مستخدم بالفعل' });
+    } else {
+      res.status(500).json({ error: 'خطأ في إضافة المستخدم' });
     }
-
-    res.json({ success: true, message: 'تمت إضافة المساق بنجاح!', courseId });
-  } catch (error) {
-    console.error('Error creating elective course:', error);
-    res.status(500).json({ error: 'خطأ في إضافة المساق' });
+  } finally {
+    client.release();
   }
 });
 
-// Students Routes
-app.get('/api/students', async (req, res) => {
+// Register new student
+app.post('/api/auth/register-student', verifyCommittee, async (req, res) => {
+  const client = await pool.connect();
   try {
-    const response = await baserowAPI.get(getTableUrl('users'));
-    const students = response.data.results.filter(user => user.user_role === 'student');
-    res.json(students);
+    await client.query('BEGIN');
+
+    const { email, password, name, level, is_ir } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const userQuery = `
+      INSERT INTO users (email, password, name, role)
+      VALUES ($1, $2, $3, 'student')
+      RETURNING user_id
+    `;
+    const userResult = await client.query(userQuery, [email, hashedPassword, name]);
+    const userId = userResult.rows[0].user_id;
+
+    const studentQuery = `
+      INSERT INTO students (user_id, level, is_ir)
+      VALUES ($1, $2, $3)
+      RETURNING student_id
+    `;
+    const studentResult = await client.query(studentQuery, [userId, level, is_ir || false]);
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: 'تمت إضافة الطالب بنجاح!',
+      studentId: studentResult.rows[0].student_id,
+      userId
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error creating student:', error);
+    if (error.code === '23505') {
+      res.status(400).json({ error: 'البريد الإلكتروني مستخدم بالفعل' });
+    } else {
+      res.status(500).json({ error: 'خطأ في إضافة الطالب' });
+    }
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================
+// STUDENT ROUTES
+// ============================================
+app.get('/api/students', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const query = `
+      SELECT s.student_id, s.is_ir, s.level, u.email, u.name
+      FROM students s
+      JOIN users u ON s.user_id = u.user_id
+      ORDER BY s.student_id
+    `;
+    const result = await client.query(query);
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching students:', error);
     res.status(500).json({ error: 'خطأ في جلب الطلاب' });
+  } finally {
+    client.release();
   }
 });
 
-app.post('/api/students', verifyCommittee, async (req, res) => {
+// ============================================
+// COURSE ROUTES
+// ============================================
+app.get('/api/courses', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { email, password, full_name, student_id, level, faculty } = req.body;
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const studentData = {
-      email,
-      password_hash: hashedPassword,
-      full_name,
-      student_id,
-      user_role: 'student',
-      level,
-      faculty
-    };
-
-    const response = await baserowAPI.post(getTableUrl('users'), studentData);
-    res.json({ success: true, message: 'تمت إضافة الطالب بنجاح!', studentId: response.data.id });
+    const query = 'SELECT * FROM courses ORDER BY level, name';
+    const result = await client.query(query);
+    res.json(result.rows);
   } catch (error) {
-    console.error('Error creating student:', error);
-    res.status(500).json({ error: 'خطأ في إضافة الطالب' });
+    console.error('Error fetching courses:', error);
+    res.status(500).json({ error: 'خطأ في جلب المقررات' });
+  } finally {
+    client.release();
   }
 });
 
-// Voting Routes
-app.post('/api/vote', async (req, res) => {
+app.get('/api/courses/elective', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { student_id, elective_course_id, vote_value } = req.body;
+    const query = 'SELECT * FROM courses WHERE is_elective = true ORDER BY level, name';
+    const result = await client.query(query);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching elective courses:', error);
+    res.status(500).json({ error: 'خطأ في جلب المقررات الاختيارية' });
+  } finally {
+    client.release();
+  }
+});
 
-    // Check if student already voted for this course
-    const existingVoteResponse = await baserowAPI.get(
-      `${getTableUrl('votes')}?student_id=${student_id}&elective_course_id=${elective_course_id}`
-    );
+app.post('/api/courses', verifyCommittee, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { name, credit, preid, level, is_elective } = req.body;
 
-    if (existingVoteResponse.data.results.length > 0) {
-      // Update existing vote
-      const existingVote = existingVoteResponse.data.results[0];
-      await baserowAPI.patch(`${getTableUrl('votes')}${existingVote.id}/`, {
-        vote_value,
-        voted_at: new Date().toISOString()
-      });
+    const query = `
+      INSERT INTO courses (name, credit, preid, level, is_elective)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `;
+    const result = await client.query(query, [name, credit, preid, level, is_elective || false]);
+    res.json({ success: true, message: 'تمت إضافة المقرر بنجاح!', course: result.rows[0] });
+  } catch (error) {
+    console.error('Error creating course:', error);
+    res.status(500).json({ error: 'خطأ في إضافة المقرر' });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================
+// VOTING ROUTES
+// ============================================
+app.post('/api/vote', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { student_id, course_id, vote_value } = req.body;
+
+    const checkQuery = 'SELECT * FROM votes WHERE student_id = $1 AND course_id = $2';
+    const checkResult = await client.query(checkQuery, [student_id, course_id]);
+
+    if (checkResult.rows.length > 0) {
+      const updateQuery = `
+        UPDATE votes 
+        SET vote_value = $1, voted_at = CURRENT_TIMESTAMP
+        WHERE student_id = $2 AND course_id = $3
+        RETURNING *
+      `;
+      await client.query(updateQuery, [vote_value, student_id, course_id]);
     } else {
-      // Create new vote
-      await baserowAPI.post(getTableUrl('votes'), {
-        student_id,
-        elective_course_id,
-        vote_value
-      });
+      const insertQuery = `
+        INSERT INTO votes (student_id, course_id, vote_value)
+        VALUES ($1, $2, $3)
+        RETURNING *
+      `;
+      await client.query(insertQuery, [student_id, course_id, vote_value]);
     }
 
     res.json({ success: true, message: 'تم تسجيل الصوت بنجاح!' });
   } catch (error) {
     console.error('Error voting:', error);
     res.status(500).json({ error: 'خطأ في تسجيل الصوت' });
+  } finally {
+    client.release();
   }
 });
 
-app.get('/api/votes/:elective_course_id', async (req, res) => {
+app.get('/api/votes/course/:course_id', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { elective_course_id } = req.params;
-    const response = await baserowAPI.get(`${getTableUrl('votes')}?elective_course_id=${elective_course_id}`);
-    res.json(response.data.results);
+    const { course_id } = req.params;
+    const query = 'SELECT * FROM votes WHERE course_id = $1';
+    const result = await client.query(query, [course_id]);
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching votes:', error);
     res.status(500).json({ error: 'خطأ في جلب الأصوات' });
+  } finally {
+    client.release();
   }
 });
 
-// Notifications Routes
-app.get('/api/notifications', async (req, res) => {
+// ============================================
+// SCHEDULE ROUTES
+// ============================================
+app.get('/api/schedules', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const response = await baserowAPI.get(getTableUrl('notifications'));
-    res.json(response.data.results);
+    const query = 'SELECT * FROM schedules ORDER BY level, group_number';
+    const result = await client.query(query);
+    res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching notifications:', error);
-    res.status(500).json({ error: 'خطأ في جلب الإشعارات' });
+    console.error('Error fetching schedules:', error);
+    res.status(500).json({ error: 'خطأ في جلب الجداول' });
+  } finally {
+    client.release();
   }
 });
 
-app.post('/api/notifications', verifyCommittee, async (req, res) => {
+app.post('/api/schedules', verifyCommittee, async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { title, content, notification_type, priority = 'normal' } = req.body;
+    const { group_number, level } = req.body;
 
-    const notificationData = {
-      title,
-      content,
-      notification_type,
-      priority,
-      created_at: new Date().toISOString()
-    };
-
-    const response = await baserowAPI.post(getTableUrl('notifications'), notificationData);
-    res.json({ success: true, message: 'تمت إضافة الإشعار بنجاح!', notificationId: response.data.id });
+    const query = `
+      INSERT INTO schedules (group_number, level)
+      VALUES ($1, $2)
+      RETURNING *
+    `;
+    const result = await client.query(query, [group_number, level]);
+    res.json({ success: true, message: 'تمت إضافة الجدول بنجاح!', schedule: result.rows[0] });
   } catch (error) {
-    console.error('Error creating notification:', error);
-    res.status(500).json({ error: 'خطأ في إضافة الإشعار' });
+    console.error('Error creating schedule:', error);
+    res.status(500).json({ error: 'خطأ في إضافة الجدول' });
+  } finally {
+    client.release();
   }
 });
 
-// Statistics Routes
-app.get('/api/statistics', async (req, res) => {
+// ============================================
+// SECTION ROUTES
+// ============================================
+app.get('/api/sections', async (req, res) => {
+  const client = await pool.connect();
   try {
-    // Get all data for statistics
-    const [studentsRes, coursesRes, votesRes, notificationsRes] = await Promise.all([
-      baserowAPI.get(getTableUrl('users')),
-      baserowAPI.get(getTableUrl('elective_courses')),
-      baserowAPI.get(getTableUrl('votes')),
-      baserowAPI.get(getTableUrl('notifications'))
+    const query = `
+      SELECT s.*, c.name as course_name, c.credit
+      FROM sections s
+      JOIN courses c ON s.course_id = c.course_id
+      ORDER BY s.section_id
+    `;
+    const result = await client.query(query);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching sections:', error);
+    res.status(500).json({ error: 'خطأ في جلب الشعب' });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================
+// STATISTICS ROUTES
+// ============================================
+app.get('/api/statistics', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const studentsQuery = 'SELECT COUNT(*) FROM students';
+    const coursesQuery = 'SELECT COUNT(*) FROM courses';
+    const votesQuery = 'SELECT COUNT(*) FROM votes';
+    const votingStudentsQuery = 'SELECT COUNT(DISTINCT student_id) FROM votes';
+
+    const [studentsResult, coursesResult, votesResult, votingStudentsResult] = await Promise.all([
+      client.query(studentsQuery),
+      client.query(coursesQuery),
+      client.query(votesQuery),
+      client.query(votingStudentsQuery)
     ]);
 
-    const students = studentsRes.data.results.filter(u => u.user_role === 'student');
-    const courses = coursesRes.data.results;
-    const votes = votesRes.data.results;
-    const notifications = notificationsRes.data.results;
-
-    // Calculate statistics
-    const totalStudents = students.length;
-    const totalVotes = votes.length;
-    const votingStudents = new Set(votes.map(v => v.student_id)).size;
+    const totalStudents = parseInt(studentsResult.rows[0].count);
+    const totalCourses = parseInt(coursesResult.rows[0].count);
+    const totalVotes = parseInt(votesResult.rows[0].count);
+    const votingStudents = parseInt(votingStudentsResult.rows[0].count);
     const participationRate = totalStudents > 0 ? (votingStudents / totalStudents * 100).toFixed(1) : 0;
 
     res.json({
       totalStudents,
+      totalCourses,
       totalVotes,
       votingStudents,
-      participationRate,
-      totalCourses: courses.length,
-      recentNotifications: notifications.slice(0, 5)
+      participationRate
     });
   } catch (error) {
     console.error('Error fetching statistics:', error);
     res.status(500).json({ error: 'خطأ في جلب الإحصائيات' });
+  } finally {
+    client.release();
   }
 });
 
-// Health check
+// ============================================
+// HEALTH CHECK
+// ============================================
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
@@ -303,12 +474,15 @@ app.use((error, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 خادم SMART Schedule يعمل على المنفذ ${PORT}`);
-  console.log(`📊 متصل بقاعدة بيانات Baserow رقم ${DATABASE_ID}`);
+  console.log(`🚀 SmartSchedule Server running on port ${PORT}`);
+  console.log(`📊 Connected to PostgreSQL database: ${process.env.DB_NAME}`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('🛑 إغلاق الخادم...');
-  process.exit(0);
+  console.log('🛑 Shutting down server...');
+  pool.end(() => {
+    console.log('Database pool closed');
+    process.exit(0);
+  });
 });
