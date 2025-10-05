@@ -176,7 +176,7 @@ app.post('/api/auth/register-user', verifyCommittee, async (req, res) => {
 
     res.json({ success: true, message: 'تمت إضافة المستخدم بنجاح!', user: result.rows[0] });
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => { });
+    await client.query('ROLLBACK').catch(()=>{});
     console.error('Error creating user:', error);
     if (error.code === '23505') {
       res.status(400).json({ error: 'البريد الإلكتروني مستخدم بالفعل' });
@@ -423,28 +423,27 @@ app.get('/api/sections', async (req, res) => {
 app.get('/api/statistics', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    // الاستعلام المحدث لعد الطلاب من جدول users بناءً على الدور
-    // هذا يحل مشكلة ظهور الصفر (0) إذا لم تكن هناك سجلات في جدول students المنفصل
-    const studentsQuery = "SELECT COUNT(*) FROM users WHERE role = 'student'";
-
-    // الاستعلامات الأخرى (لا تحتاج لتغيير)
+    const studentsQuery = 'SELECT COUNT(*) FROM students';
+    const coursesQuery = 'SELECT COUNT(*) FROM courses';
     const votesQuery = 'SELECT COUNT(*) FROM votes';
     const votingStudentsQuery = 'SELECT COUNT(DISTINCT student_id) FROM votes';
 
-    // ملاحظة: تم حذف استعلام coursesQuery من الـ Promise.all لعدم استخدامه في الحساب
-    const [studentsResult, votesResult, votingStudentsResult] = await Promise.all([
+    const [studentsResult, coursesResult, votesResult, votingStudentsResult] = await Promise.all([
       client.query(studentsQuery),
+      client.query(coursesQuery),
       client.query(votesQuery),
       client.query(votingStudentsQuery)
     ]);
 
     const totalStudents = parseInt(studentsResult.rows[0].count);
+    const totalCourses = parseInt(coursesResult.rows[0].count);
     const totalVotes = parseInt(votesResult.rows[0].count);
     const votingStudents = parseInt(votingStudentsResult.rows[0].count);
     const participationRate = totalStudents > 0 ? (votingStudents / totalStudents * 100).toFixed(1) : 0;
 
     res.json({
       totalStudents,
+      totalCourses,
       totalVotes,
       votingStudents,
       participationRate
@@ -456,6 +455,7 @@ app.get('/api/statistics', authenticateToken, async (req, res) => {
     client.release();
   }
 });
+
 // ============================================
 // HEALTH CHECK
 // ============================================
