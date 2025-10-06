@@ -1,78 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Navbar, Nav, Button, Badge, ProgressBar } from 'react-bootstrap';
+import { Container, Row, Col, Card, Navbar, Nav, Button, Badge, ProgressBar, Spinner, Alert } from 'react-bootstrap';
 import { FaUsers, FaCheckCircle, FaComments, FaVoteYea, FaBell, FaCalendarAlt, FaBook, FaBalanceScale, FaHome, FaSignOutAlt, FaUserGraduate } from 'react-icons/fa';
-import { IoStatsChart } from "react-icons/io5"; // Using a different icon for Stats/Elective
-import '../App.css'; // Import custom CSS// Import custom CSS
-
-// --- Mock Data Structure (Aligned with DB Schema) ---
-
-// Mocking data retrieval from the database tables: Students, Courses, Votes, Comments
-const MOCK_DATA = {
-  totalStudents: 247,
-  studentsWhoVoted: 189,
-  totalComments: 34,
-
-  // Data from Votes, Courses, and calculated stats
-  votingStats: {
-    totalVotes: 189,
-    participationPercentage: 76,
-    daysRemaining: 5,
-  },
-
-  electiveCourses: [
-    { course_id: 101, code: 'CSI 451', title: 'Advanced Artificial Intelligence', votes: 68, totalVotesRequired: 80, voted: false, percentage: 85 },
-    { course_id: 102, code: 'CSI 453', title: 'Information Security', votes: 58, totalVotesRequired: 80, voted: false, percentage: 72 },
-    { course_id: 103, code: 'CSI 455', title: 'Machine Learning', votes: 50, totalVotesRequired: 80, voted: false, percentage: 63 },
-  ],
-
-  // Data from Notifications and linked tables (e.g., Schedules)
-  notifications: [
-    { title: 'New Student Registration', time: '2 minutes ago', content: 'Student sara.mohammed@student.ksu.edu.sa registered for courses.' },
-    { title: 'Schedule Version Update', time: '15 minutes ago', content: 'Schedule Version 2 updated - AI course time changed.' },
-    { title: 'New Student Comment', time: '1 hour ago', content: 'Received a student note regarding the Monday exam schedule.' },
-    { title: 'Elective Preference Submission', time: '3 hours ago', content: '5 new students submitted their elective course preferences.' },
-  ],
-
-  // User Info (from Users table)
-  userInfo: {
-    name: 'Dr. Ahmed Al-Rashed',
-    role: 'Load Committee Head',
-  }
-};
+import '../App.css';
+// ملاحظة: تم تعديل المسار إلى '../App.css' كما اتفقنا سابقًا
 
 // --- Sub-Components ---
 
-const StatCard = ({ icon, number, label, description }) => (
+const StatCard = ({ icon, number, label, description, loading }) => (
   <Card className="shadow-sm stat-card-custom h-100 border-0">
     <Card.Body className="d-flex flex-column align-items-center justify-content-center p-3 p-md-4">
       {icon}
-      <div className="stat-number-custom my-2">{number}</div>
+      <div className="stat-number-custom my-2">
+        {loading ? <Spinner animation="border" size="sm" /> : number}
+      </div>
       <div className="stat-label text-dark fw-bold mb-1">{label}</div>
       <p className="stat-description text-muted text-center" style={{ fontSize: '0.9rem' }}>{description}</p>
     </Card.Body>
   </Card>
 );
 
-const ElectiveCourseCard = ({ course, onVote }) => {
-  const [isVoted, setIsVoted] = useState(course.voted);
+const ElectiveCourseCard = ({ course }) => {
+  // تم حذف منطق التصويت لأن هذا هو دور إداري لعرض الإحصائيات فقط
   const votePercentage = course.percentage;
 
-  const handleVote = (e) => {
-    // Prevent parent card click effects
-    e.stopPropagation();
-
-    // Mock voting success message
-    alert(`Your vote for ${course.code} has been successfully recorded! 👍`);
-
-    // Update local state and run parent handler
-    setIsVoted(true);
-    onVote(course.course_id);
+  // زر إداري للموافقة (يجب أن ينقلك لصفحة إدارة المواد الاختيارية)
+  const handleManage = () => {
+    // بدلاً من alert، سنستخدم نافذة تأكيد أفضل في التطبيق الفعلي
+    if (window.confirm(`Are you sure you want to review and potentially approve ${course.title_ar} (${course.code})?`)) {
+      console.log(`Navigating to management for: ${course.code}`);
+      // window.location.href = 'manageElectives.html'; // يتم تفعيل هذا بعد إنشاء الصفحة
+    }
   };
 
   return (
     <Card className="shadow-sm p-3 border-2" style={{ transition: 'all 0.3s ease' }}>
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <span className="course-title fw-bold text-dark">{course.title}</span>
+        <span className="course-title fw-bold text-dark">{course.title_ar}</span>
         <Badge bg="primary" pill className="course-code">{course.code}</Badge>
       </div>
 
@@ -84,17 +47,17 @@ const ElectiveCourseCard = ({ course, onVote }) => {
           ></div>
         </ProgressBar>
         <div className="d-flex justify-content-between text-muted mt-1" style={{ fontSize: '0.9rem' }}>
-          <span>{course.votes} Votes</span>
+          <span>{course.votes || 0} Votes</span>
           <span>{votePercentage}%</span>
         </div>
       </div>
 
       <Button
-        onClick={handleVote}
-        className="vote-btn-custom fw-bold"
-        disabled={isVoted}
+        onClick={handleManage}
+        variant="success"
+        className="fw-bold"
       >
-        {isVoted ? 'Voted ✅' : 'Vote for this Course'}
+        Review & Approve 📝
       </Button>
     </Card>
   );
@@ -112,54 +75,150 @@ const NotificationItem = ({ notification }) => (
   </div>
 );
 
-// --- Main Dashboard Component ---
+// --- Main Component: CommitteeDashboard ---
 
-const Dashboard = () => {
-  const [electiveCourses, setElectiveCourses] = useState(MOCK_DATA.electiveCourses);
-  const { totalStudents, studentsWhoVoted, totalComments, votingStats, notifications, userInfo } = MOCK_DATA;
+// البيانات الوهمية المستخدمة حتى يتم جلب البيانات الحقيقية
+const INITIAL_MOCK_DATA = {
+  totalStudents: '...',
+  votingStudents: '...',
+  totalComments: '...',
+  totalVotes: '...',
+  participationRate: '...',
+};
 
-  // Statistics for the main grid
-  const stats = [
-    { icon: <FaUserGraduate className="stat-icon-custom" />, number: totalStudents, label: 'Total Students', description: 'Students enrolled this semester' },
-    { icon: <FaCheckCircle className="stat-icon-custom" />, number: studentsWhoVoted, label: 'Elective Votes Cast', description: 'Students who submitted preferences' },
-    { icon: <FaComments className="stat-icon-custom" />, number: totalComments, label: 'Student Comments', description: 'Notes received about schedules' },
-  ];
+const DUMMY_NOTIFICATIONS = [
+  { title: 'System Notification', time: 'Just now', content: 'Connecting to real-time data from server...' },
+  { title: 'Test Alert', time: '1 min ago', content: 'Database connection successful.' },
+];
 
-  const handleCourseVote = (courseId) => {
-    // In a real application, this would send an API request to insert a row in the 'votes' table
-    // and then refetch data to update the counts.
-    setElectiveCourses(prevCourses =>
-      prevCourses.map(course =>
-        course.course_id === courseId
-          ? {
-            ...course,
-            voted: true,
-            votes: course.votes + 1,
-            percentage: Math.round(((course.votes + 1) / course.totalVotesRequired) * 100) // Recalculate percentage
-          }
-          : course
-      )
-    );
+const CommitteeDashboard = () => {
+  const [stats, setStats] = useState(INITIAL_MOCK_DATA);
+  const [votingCourses, setVotingCourses] = useState([]);
+  const [userInfo, setUserInfo] = useState({ name: 'Guest', role: 'Loading Committee' });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // ********** JAVASCRIPT FETCH LOGIC **********
+
+  // دالة مساعدة لجلب البيانات مع معالجة الخطأ و **إرسال التوكن**
+  const fetchData = async (url) => {
+    // 1. جلب التوكن من localStorage (يجب أن يتم تخزينه بعد تسجيل الدخول)
+    const token = localStorage.getItem('token');
+
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        // 2. إرسال التوكن في عنوان Authorization Header
+        ...(token && { 'Authorization': `Bearer ${token}` })
+      }
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Authentication failed. Please log in again.");
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
   };
 
-  const handleLogout = () => {
-    if (window.confirm('Are you sure you want to log out?')) {
-      // Placeholder for actual logout logic (clearing tokens, etc.)
-      console.log('Logging out...');
-      // window.location.href = 'committee-login.html';
+  // جلب بيانات المستخدم (يجب أن يتم استرجاعها من التوكن أو الجلسة)
+  const fetchUserInfo = async (token) => {
+    // بما أن الخادم لا يحتوي على مسار /api/user/info
+    // سنستخدم التوكن نفسه لجلب البيانات، ولكن بما أننا لا نملك كود تسجيل الدخول
+    // سنبقي على البيانات الوهمية مع افتراض أن التوكن موجود للمتابعة في الخطوة التالية.
+
+    // **لحل مشكلة إظهار الاسم الحقيقي بعد تسجيل الدخول:**
+    // يجب أن يتم تخزين بيانات المستخدم (الاسم والدور) في localStorage بعد نجاح الـ login
+    const storedUser = JSON.parse(localStorage.getItem('user')) || {};
+
+    if (storedUser.full_name && storedUser.role) {
+      setUserInfo({ name: storedUser.full_name, role: storedUser.role });
+    } else {
+      // إذا لم نجد البيانات المخزنة، نعرض بيانات وهمية مؤقتة
+      setUserInfo({ name: 'Dr. Ahmed Al-Rashed (Mock)', role: 'Load Committee Head' });
     }
   };
 
-  // Effect to apply the initial animation class
+  // جلب الإحصائيات العامة وبيانات التصويت
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // جلب الإحصائيات من المسار الذي أنشأته: /api/statistics
+      const statsData = await fetchData('http://localhost:5000/api/statistics');
+
+      // تحقق من وجود totalStudents قبل القسمة لمنع أخطاء JavaScript
+      const participationRate = statsData.totalStudents > 0
+        ? ((statsData.votingStudents / statsData.totalStudents) * 100).toFixed(1)
+        : 0;
+
+      setStats({
+        totalStudents: statsData.totalStudents,
+        votingStudents: statsData.votingStudents,
+        totalComments: 34, // Mock data since no /api/comments/count exists yet
+        totalVotes: statsData.totalVotes,
+        participationRate: participationRate,
+      });
+
+      // جلب المقررات الاختيارية
+      const courses = await fetchData('http://localhost:5000/api/courses/elective');
+
+      // جلب الأصوات وتجميعها
+      const votesPromises = courses.map(course =>
+        fetchData(`http://localhost:5000/api/votes/course/${course.course_id}`)
+      );
+      const votesResults = await Promise.all(votesPromises);
+
+      // دمج الأصوات مع بيانات المقررات
+      const coursesWithVotes = courses.map((course, index) => {
+        const totalVotesForCourse = votesResults[index].length;
+
+        // نستخدم إجمالي الطلاب المصوتين (votingStudents) كقاعدة للحساب
+        const potentialVoters = statsData.votingStudents > 0 ? statsData.votingStudents : 1;
+
+        return {
+          course_id: course.course_id,
+          code: course.credit, // نفترض أن الـ credit هو الرمز (مثل CSI 451) إذا كان الاسم هو العنوان
+          title_ar: course.name, // نفترض أن name هو العنوان العربي
+          votes: totalVotesForCourse,
+          percentage: Math.round((totalVotesForCourse / potentialVoters) * 100),
+        };
+      });
+
+      setVotingCourses(coursesWithVotes);
+
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      setError(`Failed to load data from server. Details: ${err.message}. Please ensure the backend is running and you are logged in.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // تشغيل الجلب عند تحميل المكون
   useEffect(() => {
+    fetchUserInfo();
+    fetchDashboardData();
     document.body.style.direction = 'ltr';
     return () => {
-      document.body.style.direction = 'rtl'; // Cleanup if necessary
+      document.body.style.direction = 'rtl';
     };
   }, []);
 
+  // تحديد الإحصائيات التي ستعرض في البطاقات
+  const displayStats = [
+    { icon: <FaUserGraduate className="stat-icon-custom" />, number: stats.totalStudents, label: 'Total Students', description: 'Students enrolled this semester' },
+    { icon: <FaCheckCircle className="stat-icon-custom" />, number: stats.votingStudents, label: 'Students Voted', description: `Participation Rate: ${stats.participationRate}%` },
+    { icon: <FaComments className="stat-icon-custom" />, number: stats.totalComments, label: 'Student Comments', description: 'Notes received about schedules' },
+  ];
+
   return (
     <div className="dashboard-page">
+      <Alert variant="info" className="text-center m-0 rounded-0">
+        **Note:** This dashboard is now fetching **live data** from the server on port 5000.
+      </Alert>
       <Container fluid="lg" className="container-custom shadow-lg">
         <Navbar expand="lg" variant="dark" className="navbar-custom p-3">
           <div className="logo-section d-flex align-items-center">
@@ -191,10 +250,16 @@ const Dashboard = () => {
             </Nav>
             <div className="user-section d-flex align-items-center ms-lg-4 mt-3 mt-lg-0">
               <div className="user-info text-white text-start me-3">
-                <div className="user-name fw-bold">{userInfo.name}</div>
+                <div className="user-name fw-bold">{loading ? 'Loading...' : userInfo.name}</div>
                 <div className="user-role" style={{ opacity: 0.8, fontSize: '0.8rem' }}>{userInfo.role}</div>
               </div>
-              <Button variant="danger" className="logout-btn fw-bold" onClick={handleLogout}>
+              <Button variant="danger" className="logout-btn fw-bold" onClick={() => {
+                // حذف التوكن وبيانات المستخدم عند تسجيل الخروج
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.confirm('Logged out successfully. Redirecting to login...');
+                // window.location.href = 'login.html'; // توجيه لصفحة تسجيل الدخول
+              }}>
                 <FaSignOutAlt className="me-1" /> Logout
               </Button>
             </div>
@@ -203,16 +268,17 @@ const Dashboard = () => {
 
         <main className="main-content p-4 p-md-5">
           <header className="welcome-section text-center mb-5">
-            <h2 className="text-dark fw-bolder mb-3">Welcome to the Load Committee Dashboard</h2>
-            <p className="text-secondary fs-6">Manage academic schedules, registration, and planning for King Saud University - College of Computer and Information Sciences students.</p>
+            <h2 className="text-dark fw-bolder mb-3">Welcome to Smart Schedule</h2>
+            <p className="text-secondary fs-6"> Manage academic schedules, registration, and planning for the Software Engineering Department - King Saud University.</p>
+            {error && <Alert variant="danger" className="mt-3">{error}</Alert>}
           </header>
 
           {/* Statistics Section */}
           <section className="stats-grid">
             <Row xs={1} md={2} lg={3} className="g-4 mb-5">
-              {stats.map((stat, index) => (
+              {displayStats.map((stat, index) => (
                 <Col key={index}>
-                  <StatCard {...stat} />
+                  <StatCard {...stat} loading={loading} />
                 </Col>
               ))}
             </Row>
@@ -221,55 +287,40 @@ const Dashboard = () => {
           {/* Elective Voting Section */}
           <section className="elective-voting-section bg-white rounded-4 p-4 p-md-5 shadow-sm">
             <h3 className="text-dark mb-4 d-flex align-items-center">
-              <FaVoteYea className="me-2 text-primary" /> Elective Course Voting
+              <FaVoteYea className="me-2 text-primary" /> Elective Course Voting Results
             </h3>
 
             <Row xs={1} sm={2} md={3} className="g-3 voting-stats mb-4">
-              <Col>
-                <Card className="voting-stat-card-custom h-100 shadow-sm border-0">
-                  <Card.Body className="p-3 text-center">
-                    <div className="voting-stat-number-custom">{votingStats.totalVotes}</div>
-                    <div className="voting-stat-label text-secondary fw-bold">Total Votes</div>
-                  </Card.Body>
-                </Card>
-              </Col>
-              <Col>
-                <Card className="voting-stat-card-custom h-100 shadow-sm border-0">
-                  <Card.Body className="p-3 text-center">
-                    <div className="voting-stat-number-custom">{votingStats.participationPercentage}%</div>
-                    <div className="voting-stat-label text-secondary fw-bold">Participation Rate</div>
-                  </Card.Body>
-                </Card>
-              </Col>
-              <Col>
-                <Card className="voting-stat-card-custom h-100 shadow-sm border-0">
-                  <Card.Body className="p-3 text-center">
-                    <div className="voting-stat-number-custom">{votingStats.daysRemaining}</div>
-                    <div className="voting-stat-label text-secondary fw-bold">Days Remaining</div>
-                  </Card.Body>
-                </Card>
-              </Col>
+              <Col><Card className="voting-stat-card-custom h-100 shadow-sm border-0"><Card.Body className="p-3 text-center"><div className="voting-stat-number-custom">{loading ? '...' : stats.totalVotes}</div><div className="voting-stat-label text-secondary fw-bold">Total Votes</div></Card.Body></Card></Col>
+              <Col><Card className="voting-stat-card-custom h-100 shadow-sm border-0"><Card.Body className="p-3 text-center"><div className="voting-stat-number-custom">{loading ? '...' : stats.participationRate + '%'}</div><div className="voting-stat-label text-secondary fw-bold">Participation Rate</div></Card.Body></Card></Col>
+              <Col><Card className="voting-stat-card-custom h-100 shadow-sm border-0"><Card.Body className="p-3 text-center"><div className="voting-stat-number-custom">5</div><div className="voting-stat-label text-secondary fw-bold">Days Remaining (Mock)</div></Card.Body></Card></Col>
             </Row>
+
+            {loading && <div className="text-center my-4"><Spinner animation="border" variant="primary" /><p className="text-muted mt-2">Loading course voting data...</p></div>}
+
+            {!loading && votingCourses.length === 0 && (
+              <Alert variant="warning" className="text-center">No elective courses or voting data found.</Alert>
+            )}
 
             <div className="elective-courses">
               <Row xs={1} md={3} className="g-4">
-                {electiveCourses.map(course => (
+                {votingCourses.map(course => (
                   <Col key={course.course_id}>
-                    <ElectiveCourseCard course={course} onVote={handleCourseVote} />
+                    <ElectiveCourseCard course={course} />
                   </Col>
                 ))}
               </Row>
             </div>
           </section>
 
-          {/* Notifications Section */}
+          {/* Notifications Section - Remains Mock for now, requires dedicated /api/notifications route */}
           <section className="notifications-section bg-white rounded-4 p-4 p-md-5 shadow-sm mt-5">
             <h3 className="text-dark mb-4 d-flex align-items-center">
-              <FaBell className="me-2 text-primary" /> Recent Notifications
+              <FaBell className="me-2 text-primary" /> Recent Notifications (Mock Data)
             </h3>
 
             <div>
-              {notifications.map((notification, index) => (
+              {DUMMY_NOTIFICATIONS.map((notification, index) => (
                 <NotificationItem key={index} notification={notification} />
               ))}
             </div>
@@ -280,4 +331,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default CommitteeDashboard;

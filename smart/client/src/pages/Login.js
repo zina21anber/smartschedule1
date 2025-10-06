@@ -44,7 +44,7 @@ function Login() {
   };
 
   return (
-    <div className="min-vh-100 d-flex align-items-center" style={{background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}}>
+    <div className="min-vh-100 d-flex align-items-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
       <Container>
         <Row className="justify-content-center">
           <Col md={6} lg={5}>
@@ -55,7 +55,7 @@ function Login() {
               </Card.Header>
               <Card.Body className="p-4">
                 {error && <Alert variant="danger">{error}</Alert>}
-                
+
                 <Form onSubmit={handleSubmit}>
                   <Form.Group className="mb-3">
                     <Form.Label>University Email</Form.Label>
@@ -91,6 +91,17 @@ function Login() {
                       'Login to Dashboard'
                     )}
                   </Button>
+                  <div className="text-center mt-3">
+                    <span className="text-muted">Don't have an account? </span>
+                    <Button
+                      variant="link"
+                      className="p-0"
+                      onClick={() => navigate('/Signup')}
+                      disabled={loading}
+                    >
+                      Sign up here
+                    </Button>
+                  </div>
                 </Form>
               </Card.Body>
             </Card>
