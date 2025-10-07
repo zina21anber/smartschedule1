@@ -2,28 +2,25 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
+import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
-import ManageSchedules from './pages/ManageSchedules'; // تأكد أن الملف موجود
+import ManageSchedules from './pages/ManageSchedules';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
-// الحماية الأصلية - معلّقة مؤقتاً
-// function ProtectedRoute({ children }) {
-//   const token = localStorage.getItem('token');
-//   return token ? children : <Navigate to="/login" replace />;
-// }
-
-// مؤقتاً: إلغاء التحقق من التوكن
 function ProtectedRoute({ children }) {
-  return children; // السماح بالدخول بدون تحقق
+  const token = localStorage.getItem('token');
+  return token ? children : <Navigate to="/login" replace />;
 }
 
 function App() {
   return (
     <Router>
       <Routes>
+        {/* Public routes */}
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
 
-        {/* صفحة الداشبورد بدون تحقق مؤقتاً */}
+        {/* Protected routes */}
         <Route
           path="/dashboard"
           element={
@@ -33,7 +30,6 @@ function App() {
           }
         />
 
-        {/* صفحة إدارة الجداول */}
         <Route
           path="/manageSchedules"
           element={
@@ -43,7 +39,7 @@ function App() {
           }
         />
 
-        {/* إعادة التوجيه للرابط الافتراضي */}
+        {/* Default and fallback routes */}
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
