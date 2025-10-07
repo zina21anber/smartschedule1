@@ -32,8 +32,27 @@ function Login() {
 
     try {
       const response = await authAPI.login(email, password);
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+      const token = response.data?.token;
+      const user = response.data?.user;
+
+      if (!token || !user) {
+        throw new Error('Invalid login response from server');
+      }
+
+      // ✅ Save token and user to localStorage
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+
+      // ✅ Verify saved values
+      const savedToken = localStorage.getItem('token');
+      if (!savedToken) {
+        throw new Error('Token was not saved to localStorage');
+      }
+
+      console.log('✅ Token saved:', savedToken);
+      console.log('✅ User saved:', localStorage.getItem('user'));
+
+      // ✅ Navigate after confirming save
       navigate('/dashboard');
     } catch (err) {
       console.error('Login error:', err);
@@ -44,7 +63,10 @@ function Login() {
   };
 
   return (
-    <div className="min-vh-100 d-flex align-items-center" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+    <div
+      className="min-vh-100 d-flex align-items-center"
+      style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
+    >
       <Container>
         <Row className="justify-content-center">
           <Col md={6} lg={5}>
@@ -91,6 +113,7 @@ function Login() {
                       'Login to Dashboard'
                     )}
                   </Button>
+
                   <div className="text-center mt-3">
                     <span className="text-muted">Don't have an account? </span>
                     <Button

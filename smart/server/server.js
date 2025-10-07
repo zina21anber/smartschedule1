@@ -399,23 +399,38 @@ app.post('/api/schedules', verifyCommittee, async (req, res) => {
 // SECTION ROUTES
 // ============================================
 app.get('/api/sections', async (req, res) => {
+  // حماية المسار
   const client = await pool.connect();
   try {
     const query = `
-      SELECT s.*, c.name as course_name, c.credit
-      FROM sections s
-      JOIN courses c ON s.course_id = c.course_id
-      ORDER BY s.section_id
-    `;
+            SELECT 
+                s.*, 
+                c.name AS course_name, 
+                c.level AS level,         
+                c.dept_code AS dept_code
+            FROM sections s
+            JOIN courses c ON s.course_id = c.course_id
+            ORDER BY c.level, s.day_code, s.start_time
+        `;
     const result = await client.query(query);
-    res.json(result.rows);
+
+    // التحويل النهائي لضمان أن 'level' هو رقم صحيح في JavaScript
+    const sectionsWithCastedLevel = result.rows.map(row => ({
+      ...row,
+      level: parseInt(row.level, 10) // تحويل القيمة إلى عدد صحيح
+    }));
+
+    res.json(sectionsWithCastedLevel); // إرسال الصفوف بعد التحويل
+
   } catch (error) {
-    console.error('Error fetching sections:', error);
-    res.status(500).json({ error: 'خطأ في جلب الشعب' });
+    console.error('Error fetching sections with course info:', error);
+    res.status(500).json({ error: 'خطأ في جلب الشعب مع معلومات المقرر' });
   } finally {
     client.release();
   }
 });
+
+
 // ============================================
 // STATISTICS ROUTES
 // ============================================
