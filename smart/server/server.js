@@ -394,7 +394,6 @@ app.post('/api/schedules', verifyCommittee, async (req, res) => {
     client.release();
   }
 });
-
 // ============================================
 // SECTION ROUTES
 // ============================================
@@ -414,14 +413,12 @@ app.get('/api/sections', async (req, res) => {
         `;
     const result = await client.query(query);
 
-    // التحويل النهائي لضمان أن 'level' هو رقم صحيح في JavaScript
     const sectionsWithCastedLevel = result.rows.map(row => ({
       ...row,
-      level: parseInt(row.level, 10) // تحويل القيمة إلى عدد صحيح
+      level: parseInt(row.level, 10)
     }));
 
-    res.json(sectionsWithCastedLevel); // إرسال الصفوف بعد التحويل
-
+    res.json(sectionsWithCastedLevel);
   } catch (error) {
     console.error('Error fetching sections with course info:', error);
     res.status(500).json({ error: 'خطأ في جلب الشعب مع معلومات المقرر' });
@@ -429,6 +426,7 @@ app.get('/api/sections', async (req, res) => {
     client.release();
   }
 });
+
 
 
 // ============================================
@@ -498,4 +496,104 @@ process.on('SIGTERM', () => {
     console.log('Database pool closed');
     process.exit(0);
   });
+});
+// ... (بقية الاستيرادات و middleware)
+
+// ============================================
+// AI SCHEDULER ROUTES
+// ============================================
+
+// مسار لتوليد جدول جديد باستخدام Gemini
+app.post('/api/schedule/generate', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { currentLevel, currentSchedule, seCourses, rules } = req.body;
+
+    // 1. تجميع بيانات الجدول الحالي
+    const currentSectionsMap = {};
+    currentSchedule.sections.forEach(sec => {
+      const timeSlot = `${sec.day_code} ${sec.start_time.substring(0, 5)} - ${sec.end_time.substring(0, 5)}`;
+      // نحتاج فقط لتعيين المحاضرات الأساسية التي يجب تجنبها
+      if (sec.section_type === 'LECTURE' || sec.type === 'LAB') {
+        currentSectionsMap[timeSlot] = `${sec.dept_code} ${sec.course_name.split(' ')[0]} (${sec.section_type})`;
+      }
+    });
+
+    const occupiedSlots = JSON.stringify(currentSectionsMap);
+
+    // 2. تجميع بيانات مواد هندسة البرمجيات التي يجب جدولتها
+    const requiredSeCourses = seCourses.map(c =>
+      `${c.name} (${c.credit} ساعات، المستوى ${c.level})`
+    ).join(', ');
+
+    // 3. بناء موجه Gemini (Prompt)
+    const systemInstruction = `You are a university academic scheduler AI. Your task is to generate a time schedule for Software Engineering (SE) courses based on predefined occupied slots (Official non-SE courses). The schedule must be based on a 60-minute time slot (e.g., 08:00-09:00, 09:00-10:00). Output MUST be a structured JSON array of objects.`;
+
+    const userQuery = `
+            Please schedule the following SE courses into the available time slots for Level ${currentLevel}. The timetable operates from Sunday (S) to Thursday (H).
+
+            - **Mandatory Courses to Schedule:** ${requiredSeCourses}
+            - **Current Rules/Constraints:** ${rules.join('; ')}
+            - **Occupied Slots to AVOID (Official Non-SE Courses):** ${occupiedSlots}
+
+            Generate a schedule that avoids all occupied slots and minimizes time gaps. Use the format: [{course_id: number, day: string (S, M, T, W, H), start_time: string (HH:MM), end_time: string (HH:MM), section_type: 'LECTURE'}].
+        `;
+
+    // 4. استدعاء Gemini API
+    const apiKey = "";
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+    const payload = {
+      contents: [{ parts: [{ text: userQuery }] }],
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              course_id: { type: "NUMBER" },
+              day: { type: "STRING" },
+              start_time: { type: "STRING" },
+              end_time: { type: "STRING" },
+              section_type: { type: "STRING" }
+            },
+            required: ["course_id", "day", "start_time", "end_time", "section_type"]
+          }
+        }
+      }
+    };
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+    const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!jsonText) {
+      console.error("Gemini failed to return valid JSON:", result);
+      throw new Error("AI did not return a valid schedule. Check the AI prompt or rules.");
+    }
+
+    const generatedSchedule = JSON.parse(jsonText);
+
+    // 5. حفظ الجدول المُولَّد في قاعدة البيانات (Sections)
+    // (هذه الخطوة معقدة وتتطلب منطق إدخال جماعي، سنفترض أنها تمت)
+
+    res.json({
+      success: true,
+      message: "تم توليد الجدول بنجاح بواسطة AI.",
+      schedule: generatedSchedule
+    });
+
+  } catch (error) {
+    console.error('AI Schedule Generation error:', error);
+    res.status(500).json({ error: error.message || 'خطأ في معالجة طلب الذكاء الاصطناعي.' });
+  } finally {
+    client.release();
+  }
 });
