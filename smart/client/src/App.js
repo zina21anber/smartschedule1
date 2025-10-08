@@ -1,10 +1,13 @@
 // smart3/client/src/App.js
+
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import ManageSchedules from './pages/ManageSchedules';
+// ✅ هذا هو السطر الذي يحتاج إلى التعديل ليتوافق مع مسار الملف:
+import ManageStudents from './pages/ManageStudents'; 
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 function ProtectedRoute({ children }) {
@@ -35,6 +38,15 @@ function App() {
           element={
             <ProtectedRoute>
               <ManageSchedules />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/managestudents"
+          element={
+            <ProtectedRoute>
+              <ManageStudents />
             </ProtectedRoute>
           }
         />
