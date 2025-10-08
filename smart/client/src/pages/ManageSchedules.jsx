@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Container, Card, Button, Alert, Spinner, Table } from 'react-bootstrap';
+import { Container, Card, Button, Alert, Spinner, Table, Modal, Form } from 'react-bootstrap';
 import { FaArrowRight, FaFilter, FaCalendarAlt, FaSyncAlt } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import '../App.css';
@@ -36,32 +36,21 @@ const fetchData = async (url) => {
     return response.json();
 };
 
-// ------------------------------------------------------------------
-// ✅ Table component with merged cells according to lecture duration
-// ------------------------------------------------------------------
 const ScheduleTable = ({ scheduleNumber, level, sections, loading }) => {
+    const [showCommentModal, setShowCommentModal] = useState(false);
+    const [comment, setComment] = useState('');
+
     const scheduleMap = {};
 
     sections.forEach((sec) => {
         let dayKey;
         switch (sec.day_code) {
-            case 'S':
-                dayKey = 'Sunday';
-                break;
-            case 'M':
-                dayKey = 'Monday';
-                break;
-            case 'T':
-                dayKey = 'Tuesday';
-                break;
-            case 'W':
-                dayKey = 'Wednesday';
-                break;
-            case 'H':
-                dayKey = 'Thursday';
-                break;
-            default:
-                dayKey = sec.day_code;
+            case 'S': dayKey = 'Sunday'; break;
+            case 'M': dayKey = 'Monday'; break;
+            case 'T': dayKey = 'Tuesday'; break;
+            case 'W': dayKey = 'Wednesday'; break;
+            case 'H': dayKey = 'Thursday'; break;
+            default: dayKey = sec.day_code;
         }
 
         const start = sec.start_time ? sec.start_time.substring(0, 5) : null;
@@ -86,7 +75,7 @@ const ScheduleTable = ({ scheduleNumber, level, sections, loading }) => {
 
             while (i < timeSlots.length) {
                 const slot = timeSlots[i];
-                const [slotStart, slotEnd] = slot.split(' - ');
+                const [slotStart] = slot.split(' - ');
                 const section = daySections.find((sec) => sec.timeStart === slotStart);
 
                 if (section) {
@@ -172,7 +161,6 @@ const ScheduleTable = ({ scheduleNumber, level, sections, loading }) => {
                 ) : (
                     generateTimeTable()
                 )}
-
                 <div className="text-center mt-4">
                     <Button
                         onClick={() => alert('AI will generate the schedule')}
@@ -180,15 +168,43 @@ const ScheduleTable = ({ scheduleNumber, level, sections, loading }) => {
                     >
                         <FaSyncAlt className="ml-2" /> Generate Schedule (AI)
                     </Button>
+                    <Button
+                        onClick={() => setShowCommentModal(true)}
+                        className="ms-2 bg-warning border-0"
+                    >
+                        أضف تعليق
+                    </Button>
+                    <Modal show={showCommentModal} onHide={() => setShowCommentModal(false)}>
+                        <Modal.Header closeButton>
+                            <Modal.Title>إضافة تعليق</Modal.Title>
+                        </Modal.Header>
+                        <Modal.Body>
+                            <Form.Group>
+                                <Form.Label>تعليقك</Form.Label>
+                                <Form.Control
+                                    as="textarea"
+                                    rows={3}
+                                    value={comment}
+                                    onChange={e => setComment(e.target.value)}
+                                    placeholder="اكتب تعليقك هنا..."
+                                />
+                            </Form.Group>
+                        </Modal.Body>
+                        <Modal.Footer>
+                            <Button variant="secondary" onClick={() => setShowCommentModal(false)}>
+                                إلغاء
+                            </Button>
+                            <Button variant="primary" onClick={() => { setShowCommentModal(false); }}>
+                                حفظ التعليق
+                            </Button>
+                        </Modal.Footer>
+                    </Modal>
                 </div>
             </Card.Body>
         </Card>
     );
 };
 
-// ----------------------------------------------------
-// Main component: ManageSchedules
-// ----------------------------------------------------
 const ManageSchedules = () => {
     const [currentLevel, setCurrentLevel] = useState(3);
     const [schedules, setSchedules] = useState([]);
@@ -205,7 +221,6 @@ const ManageSchedules = () => {
             const allSections = await fetchData('http://localhost:5000/api/sections');
             const byLevel = allSections.filter((sec) => parseInt(sec.level) === currentLevel);
             const finalSections = byLevel.filter((sec) => sec.dept_code !== 'SE');
-
             const group1 = finalSections.filter((sec) => sec.student_group === 1);
             const group2 = finalSections.filter((sec) => sec.student_group === 2);
 
@@ -274,7 +289,6 @@ const ManageSchedules = () => {
                         <div className="bg-indigo-50 border-r-4 border-indigo-500 p-3 mb-4">
                             <span>📊 Level {currentLevel}</span>
                         </div>
-
                         <div className="grid md:grid-cols-2 gap-6">
                             {schedules.length > 0 ? (
                                 schedules.map((schedule, index) => (

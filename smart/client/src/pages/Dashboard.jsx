@@ -5,6 +5,10 @@ import { FaUsers, FaCheckCircle, FaComments, FaVoteYea, FaBell, FaCalendarAlt, F
 import { useNavigate } from 'react-router-dom';
 import '../App.css'; // <--- المسار الصحيح للملف في المجلد الأب (src)
 
+// ✅ استيراد دوال الـ API (يفترض أنك ستضيفها بنفسك أو تستخدم axios مباشرة)
+// import { statsAPI, courseAPI } from '../services/api'; 
+
+
 // --- Sub-Components ---
 const StatCard = ({ icon, number, label, description, loading }) => (
   <Card className="shadow-sm stat-card-custom h-100 border-0">
@@ -131,6 +135,7 @@ const CommitteeDashboard = () => {
     setLoading(true);
     setError(null);
     try {
+      // ✅ استخدام fetchData لجلب الإحصائيات (من الخادم)
       const statsData = await fetchData('http://localhost:5000/api/statistics');
 
       const participationRate = statsData.totalStudents > 0
@@ -145,7 +150,7 @@ const CommitteeDashboard = () => {
         participationRate: participationRate,
       });
 
-      // جلب المقررات الاختيارية
+      // ✅ استخدام fetchData لجلب المقررات الاختيارية (من الخادم)
       const courses = await fetchData('http://localhost:5000/api/courses/elective');
 
       // جلب الأصوات وتجميعها
@@ -176,6 +181,7 @@ const CommitteeDashboard = () => {
 
     } catch (err) {
       console.error("Error fetching data:", err);
+      // هذا الجزء يرسل رسالة خطأ عند فشل المصادقة
       setError(`فشل تحميل البيانات. يرجى التأكد من تشغيل الخادم والمصادقة. ${err.message}`);
     } finally {
       setLoading(false);
@@ -213,15 +219,18 @@ const CommitteeDashboard = () => {
           <Navbar.Toggle aria-controls="basic-navbar-nav" />
           <Navbar.Collapse id="basic-navbar-nav" className="ms-auto">
             <Nav className="me-auto my-2 my-lg-0 nav-menu" style={{ fontSize: '0.9rem' }}>
-              <Nav.Link href="#" className="nav-link-custom active rounded-2 p-2 mx-1">
+              <Nav.Link onClick={() => navigate('/dashboard')} className="nav-link-custom active rounded-2 p-2 mx-1">
                 <FaHome className="me-2" /> HOME
               </Nav.Link>
               <Nav.Link onClick={() => navigate('/manageSchedules')} className="nav-link-custom rounded-2 p-2 mx-1">
                 <FaCalendarAlt className="me-2" /> Manage Schedules & Levels
               </Nav.Link>
-              <Nav.Link href="manageStu-enhanced-display.html" className="nav-link-custom rounded-2 p-2 mx-1">
+              
+              {/* ✅ التعديل: ربط زر Manage Students بالتوجيه الداخلي لـ React */}
+              <Nav.Link onClick={() => navigate('/managestudents')} className="nav-link-custom rounded-2 p-2 mx-1">
                 <FaUsers className="me-2" /> Manage Students
               </Nav.Link>
+              
               <Nav.Link href="addElective.html" className="nav-link-custom rounded-2 p-2 mx-1">
                 <FaBook className="me-2" /> Course Information
               </Nav.Link>
@@ -240,7 +249,7 @@ const CommitteeDashboard = () => {
               <Button variant="danger" className="logout-btn fw-bold" onClick={() => {
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
-                window.confirm('Logged out successfully. Redirecting to login...');
+                navigate('/login'); // ✅ استخدام navigate
               }}>
                 <FaSignOutAlt className="me-1" /> Logout
               </Button>
