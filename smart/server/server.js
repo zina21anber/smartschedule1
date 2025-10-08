@@ -61,8 +61,10 @@ const authenticateToken = (req, res, next) => {
 
 // Middleware to verify committee access
 const verifyCommittee = (req, res, next) => {
-  const { password } = req.body;
-  if (password !== process.env.COMMITTEE_PASSWORD) {
+  const { password, committeePassword } = req.body;
+  const pwd = committeePassword || password; // Accept either
+
+  if (pwd !== process.env.COMMITTEE_PASSWORD) {
     return res.status(401).json({ error: 'كلمة المرور غير صحيحة، غير مسموح بالدخول.' });
   }
   next();
@@ -402,35 +404,43 @@ app.get('/api/sections', async (req, res) => {
   const client = await pool.connect();
   try {
     const query = `
-      SELECT s.*, c.name as course_name, c.credit
+      SELECT 
+        s.*, 
+        c.name AS course_name, 
+        c.level AS level,         
+        c.dept_code AS dept_code
       FROM sections s
       JOIN courses c ON s.course_id = c.course_id
-      ORDER BY s.section_id
+      ORDER BY c.level, s.day_code, s.start_time
     `;
     const result = await client.query(query);
-    res.json(result.rows);
+
+    // Cast level to integer for consistency
+    const sectionsWithCastedLevel = result.rows.map(row => ({
+      ...row,
+      level: parseInt(row.level, 10)
+    }));
+
+    res.json(sectionsWithCastedLevel);
+
   } catch (error) {
-    console.error('Error fetching sections:', error);
-    res.status(500).json({ error: 'خطأ في جلب الشعب' });
+    console.error('Error fetching sections with course info:', error);
+    res.status(500).json({ error: 'خطأ في جلب الشعب مع معلومات المقرر' });
   } finally {
     client.release();
   }
 });
+
 // ============================================
 // STATISTICS ROUTES
 // ============================================
 app.get('/api/statistics', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    // الاستعلام المحدث لعد الطلاب من جدول users بناءً على الدور
-    // هذا يحل مشكلة ظهور الصفر (0) إذا لم تكن هناك سجلات في جدول students المنفصل
     const studentsQuery = "SELECT COUNT(*) FROM users WHERE role = 'student'";
-
-    // الاستعلامات الأخرى (لا تحتاج لتغيير)
     const votesQuery = 'SELECT COUNT(*) FROM votes';
     const votingStudentsQuery = 'SELECT COUNT(DISTINCT student_id) FROM votes';
 
-    // ملاحظة: تم حذف استعلام coursesQuery من الـ Promise.all لعدم استخدامه في الحساب
     const [studentsResult, votesResult, votingStudentsResult] = await Promise.all([
       client.query(studentsQuery),
       client.query(votesQuery),
@@ -455,7 +465,6 @@ app.get('/api/statistics', authenticateToken, async (req, res) => {
     client.release();
   }
 });
-
 
 // ============================================
 // HEALTH CHECK
@@ -484,3 +493,5 @@ process.on('SIGTERM', () => {
     process.exit(0);
   });
 });
+
+

@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Container, Row, Col, Card, Navbar, Nav, Button, Badge, ProgressBar, Spinner, Alert } from 'react-bootstrap';
+// تأكد من تثبيت هذه المكتبة: npm install react-icons
 import { FaUsers, FaCheckCircle, FaComments, FaVoteYea, FaBell, FaCalendarAlt, FaBook, FaBalanceScale, FaHome, FaSignOutAlt, FaUserGraduate } from 'react-icons/fa';
-import '../App.css';
-// ملاحظة: تم تعديل المسار إلى '../App.css' كما اتفقنا سابقًا
+import { useNavigate } from 'react-router-dom';
+import '../App.css'; // <--- المسار الصحيح للملف في المجلد الأب (src)
 
 // --- Sub-Components ---
-
 const StatCard = ({ icon, number, label, description, loading }) => (
   <Card className="shadow-sm stat-card-custom h-100 border-0">
     <Card.Body className="d-flex flex-column align-items-center justify-content-center p-3 p-md-4">
@@ -20,15 +20,11 @@ const StatCard = ({ icon, number, label, description, loading }) => (
 );
 
 const ElectiveCourseCard = ({ course }) => {
-  // تم حذف منطق التصويت لأن هذا هو دور إداري لعرض الإحصائيات فقط
   const votePercentage = course.percentage;
 
-  // زر إداري للموافقة (يجب أن ينقلك لصفحة إدارة المواد الاختيارية)
   const handleManage = () => {
-    // بدلاً من alert، سنستخدم نافذة تأكيد أفضل في التطبيق الفعلي
     if (window.confirm(`Are you sure you want to review and potentially approve ${course.title_ar} (${course.code})?`)) {
       console.log(`Navigating to management for: ${course.code}`);
-      // window.location.href = 'manageElectives.html'; // يتم تفعيل هذا بعد إنشاء الصفحة
     }
   };
 
@@ -75,9 +71,7 @@ const NotificationItem = ({ notification }) => (
   </div>
 );
 
-// --- Main Component: CommitteeDashboard ---
-
-// البيانات الوهمية المستخدمة حتى يتم جلب البيانات الحقيقية
+// --- البيانات الوهمية (Mock Data) ---
 const INITIAL_MOCK_DATA = {
   totalStudents: '...',
   votingStudents: '...',
@@ -91,24 +85,24 @@ const DUMMY_NOTIFICATIONS = [
   { title: 'Test Alert', time: '1 min ago', content: 'Database connection successful.' },
 ];
 
+
+// --- Main Component: CommitteeDashboard ---
 const CommitteeDashboard = () => {
+  // قسم useState
   const [stats, setStats] = useState(INITIAL_MOCK_DATA);
   const [votingCourses, setVotingCourses] = useState([]);
   const [userInfo, setUserInfo] = useState({ name: 'Guest', role: 'Loading Committee' });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // ********** JAVASCRIPT FETCH LOGIC **********
+  const navigate = useNavigate(); // تعريف دالة التنقل
 
-  // دالة مساعدة لجلب البيانات مع معالجة الخطأ و **إرسال التوكن**
+  // دالة مساعدة لجلب البيانات و fetchDashboardData و fetchUserInfo تبقى كما هي...
   const fetchData = async (url) => {
-    // 1. جلب التوكن من localStorage (يجب أن يتم تخزينه بعد تسجيل الدخول)
     const token = localStorage.getItem('token');
-
     const response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
-        // 2. إرسال التوكن في عنوان Authorization Header
         ...(token && { 'Authorization': `Bearer ${token}` })
       }
     });
@@ -123,33 +117,22 @@ const CommitteeDashboard = () => {
     return response.json();
   };
 
-  // جلب بيانات المستخدم (يجب أن يتم استرجاعها من التوكن أو الجلسة)
   const fetchUserInfo = async (token) => {
-    // بما أن الخادم لا يحتوي على مسار /api/user/info
-    // سنستخدم التوكن نفسه لجلب البيانات، ولكن بما أننا لا نملك كود تسجيل الدخول
-    // سنبقي على البيانات الوهمية مع افتراض أن التوكن موجود للمتابعة في الخطوة التالية.
-
-    // **لحل مشكلة إظهار الاسم الحقيقي بعد تسجيل الدخول:**
-    // يجب أن يتم تخزين بيانات المستخدم (الاسم والدور) في localStorage بعد نجاح الـ login
     const storedUser = JSON.parse(localStorage.getItem('user')) || {};
 
     if (storedUser.full_name && storedUser.role) {
       setUserInfo({ name: storedUser.full_name, role: storedUser.role });
     } else {
-      // إذا لم نجد البيانات المخزنة، نعرض بيانات وهمية مؤقتة
       setUserInfo({ name: 'Dr. Ahmed Al-Rashed (Mock)', role: 'Load Committee Head' });
     }
   };
 
-  // جلب الإحصائيات العامة وبيانات التصويت
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // جلب الإحصائيات من المسار الذي أنشأته: /api/statistics
       const statsData = await fetchData('http://localhost:5000/api/statistics');
 
-      // تحقق من وجود totalStudents قبل القسمة لمنع أخطاء JavaScript
       const participationRate = statsData.totalStudents > 0
         ? ((statsData.votingStudents / statsData.totalStudents) * 100).toFixed(1)
         : 0;
@@ -157,7 +140,7 @@ const CommitteeDashboard = () => {
       setStats({
         totalStudents: statsData.totalStudents,
         votingStudents: statsData.votingStudents,
-        totalComments: 34, // Mock data since no /api/comments/count exists yet
+        totalComments: 34,
         totalVotes: statsData.totalVotes,
         participationRate: participationRate,
       });
@@ -174,14 +157,16 @@ const CommitteeDashboard = () => {
       // دمج الأصوات مع بيانات المقررات
       const coursesWithVotes = courses.map((course, index) => {
         const totalVotesForCourse = votesResults[index].length;
-
-        // نستخدم إجمالي الطلاب المصوتين (votingStudents) كقاعدة للحساب
         const potentialVoters = statsData.votingStudents > 0 ? statsData.votingStudents : 1;
+
+        // استخدام اسم المقرر ورمز القسم الأصلي للعرض
+        const courseCode = course.dept_code || 'N/A';
+        const courseTitle = course.name;
 
         return {
           course_id: course.course_id,
-          code: course.credit, // نفترض أن الـ credit هو الرمز (مثل CSI 451) إذا كان الاسم هو العنوان
-          title_ar: course.name, // نفترض أن name هو العنوان العربي
+          code: courseCode,
+          title_ar: courseTitle,
           votes: totalVotesForCourse,
           percentage: Math.round((totalVotesForCourse / potentialVoters) * 100),
         };
@@ -191,13 +176,12 @@ const CommitteeDashboard = () => {
 
     } catch (err) {
       console.error("Error fetching data:", err);
-      setError(`Failed to load data from server. Details: ${err.message}. Please ensure the backend is running and you are logged in.`);
+      setError(`فشل تحميل البيانات. يرجى التأكد من تشغيل الخادم والمصادقة. ${err.message}`);
     } finally {
       setLoading(false);
     }
-  };
+  }, [setStats, setVotingCourses, setLoading, setError]);
 
-  // تشغيل الجلب عند تحميل المكون
   useEffect(() => {
     fetchUserInfo();
     fetchDashboardData();
@@ -205,7 +189,7 @@ const CommitteeDashboard = () => {
     return () => {
       document.body.style.direction = 'rtl';
     };
-  }, []);
+  }, [fetchDashboardData]);
 
   // تحديد الإحصائيات التي ستعرض في البطاقات
   const displayStats = [
@@ -232,7 +216,7 @@ const CommitteeDashboard = () => {
               <Nav.Link href="#" className="nav-link-custom active rounded-2 p-2 mx-1">
                 <FaHome className="me-2" /> HOME
               </Nav.Link>
-              <Nav.Link href="manageSchedules-final.html" className="nav-link-custom rounded-2 p-2 mx-1">
+              <Nav.Link onClick={() => navigate('/manageSchedules')} className="nav-link-custom rounded-2 p-2 mx-1">
                 <FaCalendarAlt className="me-2" /> Manage Schedules & Levels
               </Nav.Link>
               <Nav.Link href="manageStu-enhanced-display.html" className="nav-link-custom rounded-2 p-2 mx-1">
@@ -254,11 +238,9 @@ const CommitteeDashboard = () => {
                 <div className="user-role" style={{ opacity: 0.8, fontSize: '0.8rem' }}>{userInfo.role}</div>
               </div>
               <Button variant="danger" className="logout-btn fw-bold" onClick={() => {
-                // حذف التوكن وبيانات المستخدم عند تسجيل الخروج
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
                 window.confirm('Logged out successfully. Redirecting to login...');
-                // window.location.href = 'login.html'; // توجيه لصفحة تسجيل الدخول
               }}>
                 <FaSignOutAlt className="me-1" /> Logout
               </Button>
@@ -269,7 +251,7 @@ const CommitteeDashboard = () => {
         <main className="main-content p-4 p-md-5">
           <header className="welcome-section text-center mb-5">
             <h2 className="text-dark fw-bolder mb-3">Welcome to Smart Schedule</h2>
-            <p className="text-secondary fs-6"> Manage academic schedules, registration, and planning for the Software Engineering Department - King Saud University.</p>
+            <p className="text-secondary fs-6">Manage academic schedules, registration, and planning for the Software Engineering Department - King Saud University.</p>
             {error && <Alert variant="danger" className="mt-3">{error}</Alert>}
           </header>
 
@@ -296,7 +278,7 @@ const CommitteeDashboard = () => {
               <Col><Card className="voting-stat-card-custom h-100 shadow-sm border-0"><Card.Body className="p-3 text-center"><div className="voting-stat-number-custom">5</div><div className="voting-stat-label text-secondary fw-bold">Days Remaining (Mock)</div></Card.Body></Card></Col>
             </Row>
 
-            {loading && <div className="text-center my-4"><Spinner animation="border" variant="primary" /><p className="text-muted mt-2">Loading course voting data...</p></div>}
+            {loading && <div className="text-center my-4"><Spinner animation="border" variant="primary" /><p className="mt-2">Loading course voting data...</p></div>}
 
             {!loading && votingCourses.length === 0 && (
               <Alert variant="warning" className="text-center">No elective courses or voting data found.</Alert>
@@ -313,7 +295,7 @@ const CommitteeDashboard = () => {
             </div>
           </section>
 
-          {/* Notifications Section - Remains Mock for now, requires dedicated /api/notifications route */}
+                    /* Notifications Section - Remains Mock for now, requires dedicated /api/notifications route */
           <section className="notifications-section bg-white rounded-4 p-4 p-md-5 shadow-sm mt-5">
             <h3 className="text-dark mb-4 d-flex align-items-center">
               <FaBell className="me-2 text-primary" /> Recent Notifications (Mock Data)
