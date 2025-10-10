@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Container, Card, Button, Alert, Spinner, Table, Modal, Form } from 'react-bootstrap';
-import { FaArrowRight, FaFilter, FaCalendarAlt, FaSyncAlt } from 'react-icons/fa';
+import { Container, Card, Button, Alert, Spinner, Table, Modal, Form, Navbar, Nav, Badge } from 'react-bootstrap';
+// تم استخدام FaArrowLeft بدلاً من FaArrowRight في الأيقونات للتناسق مع LTR
+import { FaArrowLeft, FaFilter, FaCalendarAlt, FaSyncAlt, FaHome, FaUsers, FaBook, FaBalanceScale, FaBell, FaSignOutAlt } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import '../App.css';
 
+// ... (fetchData and ScheduleTable components remain the same) ...
 const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
 const timeSlots = [
     '08:00 - 09:00',
@@ -36,6 +38,7 @@ const fetchData = async (url) => {
     return response.json();
 };
 
+// ... (ScheduleTable component - adjustments made for LTR) ...
 const ScheduleTable = ({ scheduleNumber, level, sections, loading }) => {
     const [showCommentModal, setShowCommentModal] = useState(false);
     const [comment, setComment] = useState('');
@@ -166,36 +169,36 @@ const ScheduleTable = ({ scheduleNumber, level, sections, loading }) => {
                         onClick={() => alert('AI will generate the schedule')}
                         className="bg-green-600 border-0"
                     >
-                        <FaSyncAlt className="ml-2" /> Generate Schedule (AI)
+                        <FaSyncAlt className="mr-2" /> Generate Schedule (AI) 
                     </Button>
                     <Button
                         onClick={() => setShowCommentModal(true)}
                         className="ms-2 bg-warning border-0"
                     >
-                        أضف تعليق
+                        Add Comment
                     </Button>
-                    <Modal show={showCommentModal} onHide={() => setShowCommentModal(false)}>
+                    <Modal show={showCommentModal} onHide={() => setShowCommentModal(false)} dir="ltr">
                         <Modal.Header closeButton>
-                            <Modal.Title>إضافة تعليق</Modal.Title>
+                            <Modal.Title>Add Comment</Modal.Title>
                         </Modal.Header>
                         <Modal.Body>
                             <Form.Group>
-                                <Form.Label>تعليقك</Form.Label>
+                                <Form.Label>Your Comment</Form.Label>
                                 <Form.Control
                                     as="textarea"
                                     rows={3}
                                     value={comment}
                                     onChange={e => setComment(e.target.value)}
-                                    placeholder="اكتب تعليقك هنا..."
+                                    placeholder="Write your comment here..."
                                 />
                             </Form.Group>
                         </Modal.Body>
                         <Modal.Footer>
                             <Button variant="secondary" onClick={() => setShowCommentModal(false)}>
-                                إلغاء
+                                Cancel
                             </Button>
                             <Button variant="primary" onClick={() => { setShowCommentModal(false); }}>
-                                حفظ التعليق
+                                Save Comment
                             </Button>
                         </Modal.Footer>
                     </Modal>
@@ -205,14 +208,26 @@ const ScheduleTable = ({ scheduleNumber, level, sections, loading }) => {
     );
 };
 
+
 const ManageSchedules = () => {
     const [currentLevel, setCurrentLevel] = useState(3);
     const [schedules, setSchedules] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const navigate = useNavigate();
+    const [userInfo, setUserInfo] = useState({ name: 'Joud (Mock)', role: 'Load Committee' });
 
     const levels = [3, 4, 5, 6, 7, 8];
+
+    const fetchUserInfo = () => {
+        const storedUser = JSON.parse(localStorage.getItem('user')) || {};
+        if (storedUser.full_name && storedUser.role) {
+            setUserInfo({ name: storedUser.full_name, role: storedUser.role });
+        } else {
+            setUserInfo({ name: 'Joud (Mock)', role: 'Load Committee Head' });
+        }
+    };
+
 
     const fetchSchedules = useCallback(async () => {
         setLoading(true);
@@ -240,7 +255,10 @@ const ManageSchedules = () => {
     }, [currentLevel, navigate]);
 
     useEffect(() => {
+        fetchUserInfo();
         fetchSchedules();
+        // ضمان أن يكون اتجاه الجسم LTR بشكل صريح
+        document.body.style.direction = 'ltr'; 
     }, [currentLevel, fetchSchedules]);
 
     return (
@@ -248,78 +266,143 @@ const ManageSchedules = () => {
             className="min-h-screen"
             style={{ background: 'linear-gradient(135deg,#667eea 0%,#764ba2 100%)' }}
         >
-            <Container fluid="lg" className="bg-white rounded-lg shadow-lg p-4">
-                <div className="flex justify-between items-center mb-6 bg-blue-900 p-3 rounded-lg text-white">
-                    <Button onClick={() => navigate('/dashboard')} className="bg-opacity-20 border-0">
-                        <FaArrowRight className="ml-2" /> Back to Dashboard
-                    </Button>
-                    <h1 className="text-xl font-bold">Smart Schedule Management</h1>
-                    <div></div>
-                </div>
+            {/* عنوان الصفحة الموحد */}
+            <h1 className="text-center text-white fw-bolder py-3" style={{ background: '#764ba2', margin: 0 }}>
+                SMART SCHEDULE
+            </h1>
 
-                {error && <Alert variant="danger">{error}</Alert>}
+            <Container fluid="lg" className="container-custom shadow-lg">
+                {/* شريط التنقل الموحد (Admin Dashboard under Logout) */}
+                <Navbar expand="lg" variant="dark" className="navbar-custom p-3 navbar-modified">
+                    <Navbar.Toggle aria-controls="basic-navbar-nav" />
+                    <Navbar.Collapse id="basic-navbar-nav" className="w-100">
+                        {/* القائمة: من اليسار لليمين */}
+                        <Nav className="me-auto my-2 my-lg-0 nav-menu nav-menu-expanded" style={{ fontSize: '0.9rem' }}>
+                            <Nav.Link onClick={() => navigate('/dashboard')} className="nav-link-custom rounded-2 p-2 mx-1">
+                                <FaHome className="me-2" /> HOME
+                            </Nav.Link>
+                            {/* تم تمييز رابط هذه الصفحة */}
+                            <Nav.Link onClick={() => navigate('/manageSchedules')} className="nav-link-custom active rounded-2 p-2 mx-1">
+                                <FaCalendarAlt className="me-2" /> Manage Schedules & Levels
+                            </Nav.Link>
+                            <Nav.Link onClick={() => navigate('/managestudents')} className="nav-link-custom rounded-2 p-2 mx-1">
+                                <FaUsers className="me-2" /> Manage Students
+                            </Nav.Link>
+                            {/* ✅ التعديل هنا: استخدام navigate للمسار الجديد Course Information */}
+                            <Nav.Link onClick={() => navigate('/addElective')} className="nav-link-custom rounded-2 p-2 mx-1">
+                                <FaBook className="me-2" /> Course Information
+                            </Nav.Link>
+                            {/* 🚀 التعديل المطلوب: استخدام navigate للمسار الجديد Manage Rules */}
+                            <Nav.Link onClick={() => navigate('/managerules')} className="nav-link-custom rounded-2 p-2 mx-1">
+                                <FaBalanceScale className="me-2" /> Manage Rules
+                            </Nav.Link>
+                            {/* 🚀 التعديل الإضافي: استخدام navigate للمسار الجديد Manage Notifications */}
+                            <Nav.Link onClick={() => navigate('/managenotifications')} className="nav-link-custom rounded-2 p-2 mx-1">
+                                <FaBell className="me-2" /> Manage Notifications
+                            </Nav.Link>
+                        </Nav>
 
-                <Card className="mb-6 shadow">
-                    <Card.Body>
-                        <h3 className="text-xl font-bold mb-3 text-blue-800">
-                            <FaFilter className="ml-2" /> Filter Levels
-                        </h3>
-                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-                            {levels.map((level) => (
-                                <Button
-                                    key={level}
-                                    className={`font-semibold ${currentLevel === level
-                                        ? 'bg-indigo-600 text-white'
-                                        : 'bg-gray-100 text-indigo-600'
-                                        }`}
-                                    onClick={() => setCurrentLevel(level)}
-                                >
-                                    Level {level}
-                                </Button>
-                            ))}
-                        </div>
-                    </Card.Body>
-                </Card>
-
-                <Card>
-                    <Card.Body>
-                        <h3 className="text-xl font-bold mb-3 text-blue-800">
-                            <FaCalendarAlt className="ml-2" /> Suggested Schedules
-                        </h3>
-                        <div className="bg-indigo-50 border-r-4 border-indigo-500 p-3 mb-4">
-                            <span>📊 Level {currentLevel}</span>
-                        </div>
-                        <div className="grid md:grid-cols-2 gap-6">
-                            {schedules.length > 0 ? (
-                                schedules.map((schedule, index) => (
-                                    <ScheduleTable
-                                        key={index}
-                                        scheduleNumber={schedule.id}
-                                        level={currentLevel}
-                                        sections={schedule.sections}
-                                        loading={loading}
-                                    />
-                                ))
-                            ) : (
-                                <div className="text-center text-gray-600 p-6 bg-gray-50 border-dashed border-2 border-gray-300 rounded-lg">
-                                    {loading ? (
-                                        <div>
-                                            <Spinner animation="border" variant="primary" />
-                                            <p>Loading...</p>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <p>No schedules currently available for this level.</p>
-                                            <Button className="mt-3 bg-green-600 border-0">
-                                                <FaSyncAlt className="ml-2" /> Generate New Schedules (AI)
-                                            </Button>
-                                        </>
-                                    )}
+                        {/* قسم المستخدم وزر الخروج و Admin Dashboard (تحتها) */}
+                        <div className="user-section d-flex flex-column align-items-end ms-lg-4 mt-3 mt-lg-0">
+                            <div className="d-flex align-items-center mb-2">
+                                <div className="user-info text-white text-start me-3">
+                                    <div className="user-name fw-bold">{loading ? 'Loading...' : userInfo.name}</div>
+                                    <div className="user-role" style={{ opacity: 0.8, fontSize: '0.8rem' }}>{userInfo.role}</div>
                                 </div>
-                            )}
+                                <Button variant="danger" className="logout-btn fw-bold py-2 px-3" onClick={() => {
+                                    localStorage.removeItem('token');
+                                    localStorage.removeItem('user');
+                                    navigate('/login');
+                                }}>
+                                    <FaSignOutAlt className="me-1" /> Logout
+                                </Button>
+                            </div>
+                            {/* Admin Dashboard تحت زر Logout */}
+                            <Badge bg="light" text="dark" className="committee-badge p-2 mt-1" style={{ width: 'fit-content' }}>
+                                Admin Dashboard
+                            </Badge>
                         </div>
-                    </Card.Body>
-                </Card>
+                    </Navbar.Collapse>
+                </Navbar>
+                {/* نهاية شريط التنقل الموحد */}
+
+                {/* تم تعديل هذا الـ div لضمان عدم تداخل المحتوى مع الـ Navbar */}
+                <div className="bg-white rounded-lg shadow-lg p-4 mt-4"> 
+                    
+                    {/* رأس الصفحة الترحيبي (للتنظيم) */}
+                    <header className="welcome-section mb-5 text-start">
+                        <h2 className="text-dark fw-bolder mb-1">Smart Schedule Management</h2>
+                        <p className="text-secondary fs-6">View, filter, and approve suggested schedules generated by the system.</p>
+                    </header>
+                    
+                    {/* رسالة الخطأ في بداية المحتوى */}
+                    {error && <Alert variant="danger" className="text-start">{error}</Alert>}
+
+                    <Card className="mb-6 shadow">
+                        <Card.Body>
+                            {/* توحيد الترتيب: جعل العنوان والفلاتر تبدأ من اليسار */}
+                            <h3 className="text-xl font-bold mb-3 text-blue-800 text-start">
+                                <FaFilter className="mr-2" /> Filter Levels
+                            </h3>
+                            <div className="d-flex flex-wrap gap-2"> {/* استخدم flexbox لتنظيم الأزرار من اليسار لليمين */}
+                                {/* يتم عكس الترتيب هنا يدويًا ليتوافق مع الصورة التي أرسلتها (8 -> 3) لكن يظل التوزيع LTR */}
+                                {levels.slice().reverse().map((level) => (
+                                    <Button
+                                        key={level}
+                                        className={`font-semibold ${currentLevel === level
+                                            ? 'bg-indigo-600 text-white'
+                                            : 'bg-gray-100 text-indigo-600'
+                                            }`}
+                                        onClick={() => setCurrentLevel(level)}
+                                    >
+                                        Level {level}
+                                    </Button>
+                                ))}
+                            </div>
+                        </Card.Body>
+                    </Card>
+
+                    <Card>
+                        <Card.Body>
+                            {/* توحيد الترتيب: جعل العنوان يبدأ من اليسار */}
+                            <h3 className="text-xl font-bold mb-3 text-blue-800 text-start">
+                                <FaCalendarAlt className="mr-2" /> Suggested Schedules
+                            </h3>
+                            <div className="bg-indigo-50 border-l-4 border-indigo-500 p-3 mb-4 text-start"> 
+                                <span>📊 Level {currentLevel}</span>
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-6">
+                                {schedules.length > 0 ? (
+                                    schedules.map((schedule, index) => (
+                                        <ScheduleTable
+                                            key={index}
+                                            scheduleNumber={schedule.id}
+                                            level={currentLevel}
+                                            sections={schedule.sections}
+                                            loading={loading}
+                                        />
+                                    ))
+                                ) : (
+                                    <div className="text-center text-gray-600 p-6 bg-gray-50 border-dashed border-2 border-gray-300 rounded-lg">
+                                        {loading ? (
+                                            <div>
+                                                <Spinner animation="border" variant="primary" />
+                                                <p>Loading...</p>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <p>No schedules currently available for this level.</p>
+                                                <Button className="mt-3 bg-green-600 border-0">
+                                                    <FaSyncAlt className="mr-2" /> Generate New Schedules (AI)
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </Card.Body>
+                    </Card>
+                </div>
             </Container>
         </div>
     );

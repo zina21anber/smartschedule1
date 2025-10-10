@@ -3,9 +3,7 @@ import { Container, Row, Col, Card, Navbar, Nav, Button, Badge, ProgressBar, Spi
 // تأكد من تثبيت هذه المكتبة: npm install react-icons
 import { FaUsers, FaCheckCircle, FaComments, FaVoteYea, FaBell, FaCalendarAlt, FaBook, FaBalanceScale, FaHome, FaSignOutAlt, FaUserGraduate } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
-import '../App.css'; // <--- المسار الصحيح للملف في المجلد الأب (src)
-
-// ✅ استيراد دوال الـ API (يفترض أنك ستضيفها بنفسك أو تستخدم axios مباشرة)
+import '../App.css'; 
 // import { statsAPI, courseAPI } from '../services/api'; 
 
 
@@ -207,52 +205,63 @@ const CommitteeDashboard = () => {
   return (
     <div className="dashboard-page">
       <Alert variant="info" className="text-center m-0 rounded-0">
-        **Note:** This dashboard is now fetching **live data** from the server on port 5000.
+        **Note:** this dashboard is now fetching **live data** from the server on port 5000.
       </Alert>
-      <Container fluid="lg" className="container-custom shadow-lg">
-        <Navbar expand="lg" variant="dark" className="navbar-custom p-3">
-          <div className="logo-section d-flex align-items-center">
-            <Navbar.Brand className="fw-bold fs-5">SMART SCHEDULE</Navbar.Brand>
-            <Badge bg="light" text="dark" className="committee-badge me-3 p-2">Admin Dashboard</Badge>
-          </div>
+      
+      {/* التعديل 1: نقل SMART SCHEDULE كعنوان مركزي */}
+      <h1 className="text-center text-white fw-bolder py-3" style={{ background: '#764ba2', margin: 0 }}>
+          SMART SCHEDULE
+      </h1>
 
+      <Container fluid="lg" className="container-custom shadow-lg">
+        
+        <Navbar expand="lg" variant="dark" className="navbar-custom p-3 navbar-modified">
           <Navbar.Toggle aria-controls="basic-navbar-nav" />
-          <Navbar.Collapse id="basic-navbar-nav" className="ms-auto">
-            <Nav className="me-auto my-2 my-lg-0 nav-menu" style={{ fontSize: '0.9rem' }}>
+          <Navbar.Collapse id="basic-navbar-nav" className="w-100">
+            <Nav className="me-auto my-2 my-lg-0 nav-menu nav-menu-expanded" style={{ fontSize: '0.9rem' }}>
               <Nav.Link onClick={() => navigate('/dashboard')} className="nav-link-custom active rounded-2 p-2 mx-1">
                 <FaHome className="me-2" /> HOME
               </Nav.Link>
               <Nav.Link onClick={() => navigate('/manageSchedules')} className="nav-link-custom rounded-2 p-2 mx-1">
                 <FaCalendarAlt className="me-2" /> Manage Schedules & Levels
               </Nav.Link>
-              
-              {/* ✅ التعديل: ربط زر Manage Students بالتوجيه الداخلي لـ React */}
               <Nav.Link onClick={() => navigate('/managestudents')} className="nav-link-custom rounded-2 p-2 mx-1">
                 <FaUsers className="me-2" /> Manage Students
               </Nav.Link>
-              
-              <Nav.Link href="addElective.html" className="nav-link-custom rounded-2 p-2 mx-1">
+              {/* ✅ تم التعديل لربط الصفحة الجديدة Course Information */}
+              <Nav.Link onClick={() => navigate('/addElective')} className="nav-link-custom rounded-2 p-2 mx-1">
                 <FaBook className="me-2" /> Course Information
               </Nav.Link>
-              <Nav.Link href="rule.html" className="nav-link-custom rounded-2 p-2 mx-1">
+              {/* ✅ تم التعديل لربط صفحة Manage Rules بالمسار الجديد */}
+              <Nav.Link onClick={() => navigate('/managerules')} className="nav-link-custom rounded-2 p-2 mx-1">
                 <FaBalanceScale className="me-2" /> Manage Rules
               </Nav.Link>
-              <Nav.Link href="loadNotification.html" className="nav-link-custom rounded-2 p-2 mx-1">
-                <FaBell className="me-2" /> Notifications
+              {/* 🚀 التعديل هنا: استخدام navigate للمسار الجديد Manage Notifications */}
+              <Nav.Link onClick={() => navigate('/managenotifications')} className="nav-link-custom rounded-2 p-2 mx-1">
+                <FaBell className="me-2" /> Manage Notifications
               </Nav.Link>
             </Nav>
-            <div className="user-section d-flex align-items-center ms-lg-4 mt-3 mt-lg-0">
-              <div className="user-info text-white text-start me-3">
-                <div className="user-name fw-bold">{loading ? 'Loading...' : userInfo.name}</div>
-                <div className="user-role" style={{ opacity: 0.8, fontSize: '0.8rem' }}>{userInfo.role}</div>
+
+            <div className="user-section d-flex flex-column align-items-end ms-lg-4 mt-3 mt-lg-0">
+              <div className="d-flex align-items-center mb-2">
+                  <div className="user-info text-white text-start me-3">
+                      <div className="user-name fw-bold">{loading ? 'Loading...' : userInfo.name}</div>
+                      <div className="user-role" style={{ opacity: 0.8, fontSize: '0.8rem' }}>{userInfo.role}</div>
+                  </div>
+                  {/* زر تسجيل الخروج */}
+                  <Button variant="danger" className="logout-btn fw-bold py-2 px-3" onClick={() => {
+                      localStorage.removeItem('token');
+                      localStorage.removeItem('user');
+                      navigate('/login');
+                  }}>
+                      <FaSignOutAlt className="me-1" /> Logout
+                  </Button>
+                  
               </div>
-              <Button variant="danger" className="logout-btn fw-bold" onClick={() => {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                navigate('/login'); // ✅ استخدام navigate
-              }}>
-                <FaSignOutAlt className="me-1" /> Logout
-              </Button>
+              {/* التعديل 3: نقل Admin Dashboard تحت زر Logout */}
+              <Badge bg="light" text="dark" className="committee-badge p-2 mt-1" style={{ width: 'fit-content' }}>
+                  Admin Dashboard
+              </Badge>
             </div>
           </Navbar.Collapse>
         </Navbar>
@@ -304,7 +313,7 @@ const CommitteeDashboard = () => {
             </div>
           </section>
 
-                    /* Notifications Section - Remains Mock for now, requires dedicated /api/notifications route */
+          {/* Notifications Section - Remains Mock for now, requires dedicated /api/notifications route */}
           <section className="notifications-section bg-white rounded-4 p-4 p-md-5 shadow-sm mt-5">
             <h3 className="text-dark mb-4 d-flex align-items-center">
               <FaBell className="me-2 text-primary" /> Recent Notifications (Mock Data)
