@@ -2,14 +2,14 @@
 import axios from 'axios';
 
 const api = axios.create({
-  // ✅ التعديل: جعل الـ baseURL يشير إلى جذر الخادم فقط (دون /api)
+  // ✅ جعل الـ baseURL يشير إلى جذر الخادم فقط (دون /api)
   baseURL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000',
   headers: {
     'Content-Type': 'application/json'
   }
 });
 
-// Add token to requests if it exists
+// Request Interceptor: Add token to requests if it exists
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -23,6 +23,30 @@ api.interceptors.request.use(
   }
 );
 
+// ✅ Response Interceptor: Handle 401/403 errors centrally
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response ? error.response.status : null;
+
+    // إذا كان الرمز 401 (غير مصرح به) أو 403 (ممنوع)
+    if (status === 401 || status === 403) {
+      console.error("Authentication Error (401/403): Token expired or invalid. Redirecting to login.");
+      
+      // 1. حذف الـ Token والـ User من الذاكرة المحلية
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+
+      // 2. إعادة توجيه المستخدم إلى صفحة الدخول
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'; 
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+
 // Authentication API
 export const authAPI = {
   login: (email, password) => api.post('/api/auth/login', { email, password }),
@@ -30,7 +54,7 @@ export const authAPI = {
   registerStudent: (data) => api.post('/api/auth/register-student', data)
 };
 
-// Student API (تم التعديل لإضافة /api إلى كل مسار لضمان الوصول)
+// Student API
 export const studentAPI = {
   getAll: () => api.get('/api/students'),
   create: (data) => api.post('/api/students', data), 
@@ -42,7 +66,9 @@ export const studentAPI = {
 export const courseAPI = {
   getAll: () => api.get('/api/courses'),
   getElective: () => api.get('/api/courses/elective'),
-  create: (data) => api.post('/api/courses', data)
+  create: (data) => api.post('/api/courses', data),
+  getCourseDetails: (courseId) => api.get(`/api/courses/${courseId}`),
+  updateTimeSlots: (courseId, data) => api.patch(`/api/courses/${courseId}/timeslots`, data)
 };
 
 // Voting API
@@ -65,6 +91,20 @@ export const sectionAPI = {
 // Statistics API
 export const statisticsAPI = {
   getStats: () => api.get('/api/statistics')
+};
+
+// Rules API
+export const ruleAPI = {
+  getAll: () => api.get('/api/rules'),
+  create: (data) => api.post('/api/rules', data), 
+  delete: (id) => api.delete(`/api/rules/${id}`)
+};
+
+// Notification API
+export const notificationAPI = {
+    getAll: () => api.get('/api/notifications'),
+    publish: (data) => api.post('/api/notifications', data),
+    delete: (id) => api.delete(`/api/notifications/${id}`),
 };
 
 export default api;
