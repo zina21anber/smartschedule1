@@ -6,8 +6,10 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import ManageSchedules from './pages/ManageSchedules';
-// ✅ هذا هو السطر الذي يحتاج إلى التعديل ليتوافق مع مسار الملف:
 import ManageStudents from './pages/ManageStudents'; 
+import AddExternalCourses from './pages/AddExternalCourses'; 
+import ManageRules from './pages/ManageRules'; 
+import ManageNotifications from './pages/ManageNotifications'; // ✅ تم الاستيراد
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 function ProtectedRoute({ children }) {
@@ -47,6 +49,34 @@ function App() {
           element={
             <ProtectedRoute>
               <ManageStudents />
+            </ProtectedRoute>
+          }
+        />
+        
+        <Route
+          path="/addElective"
+          element={
+            <ProtectedRoute>
+              <AddExternalCourses />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/manageRules"
+          element={
+            <ProtectedRoute>
+              <ManageRules />
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* ✅ إضافة المسار الجديد لـ ManageNotifications */}
+        <Route
+          path="/managenotifications"
+          element={
+            <ProtectedRoute>
+              <ManageNotifications />
             </ProtectedRoute>
           }
         />
