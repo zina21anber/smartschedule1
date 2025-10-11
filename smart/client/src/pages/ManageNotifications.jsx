@@ -1,288 +1,169 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Container, Card, Form, Button, Row, Col, Alert, Navbar, Nav, Badge, ListGroup, Spinner } from 'react-bootstrap';
-import { FaSave, FaPlus, FaTrash, FaTimes, FaHome, FaCalendarAlt, FaUsers, FaBook, FaBalanceScale, FaBell, FaSignOutAlt, FaBullhorn } from 'react-icons/fa';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-// ملاحظة: سنفترض وجود ملف api للـ notifications لاحقًا
-// import { notificationAPI } from '../services/api'; 
-import '../App.css'; 
+import { Container, Card, Navbar, Nav, Button, Spinner, Alert, ListGroup, Form, Badge } from 'react-bootstrap';
+import { FaHome, FaCalendarAlt, FaUsers, FaBalanceScale, FaBell, FaSignOutAlt } from 'react-icons/fa';
+import '../App.css';
 
-const COMMITTEE_PASSWORD = "loadcommittee2025"; 
-
-// بيانات وهمية للإشعارات
-const MOCK_NOTIFICATIONS = [
-    { id: 101, title: 'Voting Period Extended', content: 'The elective course voting period has been extended until Thursday, 17th of October.', date: '2025-10-09', type: 'System Update' },
-    { id: 102, title: 'New Schedule Drafts', content: 'The first draft of Level 7 schedules is now available for review by faculty members.', date: '2025-10-05', type: 'Review Alert' },
-    { id: 103, title: 'Server Maintenance', content: 'Scheduled maintenance will occur on the Smart Schedule system tonight from 1 AM to 4 AM.', date: '2025-10-01', type: 'System Maintenance' },
-];
-
+// Generic fetchData function
+const fetchData = async (url) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(url, {
+        headers: { 'Content-Type': 'application/json', ...(token && { 'Authorization': `Bearer ${token}` }) }
+    });
+    if (response.status === 401 || response.status === 403) {
+        localStorage.clear();
+        throw new Error("Authentication failed. Please log in again.");
+    }
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Request failed' }));
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+};
 
 const ManageNotifications = () => {
-    const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
-    const [newNotification, setNewNotification] = useState({ title: '', content: '', type: 'General' });
-    const [accessPass, setAccessPass] = useState('');
-    const [message, setMessage] = useState({ text: '', type: '' });
-    const [loading, setLoading] = useState(false);
+    const [allComments, setAllComments] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [selectedLevel, setSelectedLevel] = useState('');
     const navigate = useNavigate();
-    
-    // Mock user info for Navbar consistency
-    const [userInfo, setUserInfo] = useState({ name: 'Guest', role: 'Load Committee' });
-    const fetchUserInfo = () => {
-        const storedUser = JSON.parse(localStorage.getItem('user')) || {};
-        if (storedUser.full_name && storedUser.role) {
-            setUserInfo({ name: storedUser.full_name, role: storedUser.role });
-        } else {
-            setUserInfo({ name: 'Committee Member', role: 'Load Committee' });
-        }
-    };
 
-    // ------------------------------------------------------------------
-    // Handlers & Functions
-    // ------------------------------------------------------------------
+    // Added minimal state for Navbar user info
+    const [userInfo] = useState({ name: 'Admin User', role: 'Committee Head' });
+    const [navbarLoading] = useState(false); // Use separate loading for Navbar info
 
-    const showMessage = (text, type) => {
-        setMessage({ text, type });
-        setTimeout(() => setMessage({ text: '', type: '' }), 4000);
-    };
+    const academicLevels = [3, 4, 5, 6, 7, 8];
 
-    const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setNewNotification(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleDeleteNotification = async (idToRemove) => {
-        if (!window.confirm("Are you sure you want to permanently delete this notification?")) {
-            return;
-        }
-
+    const fetchAllComments = useCallback(async () => {
         setLoading(true);
-
-        // هنا سيكون استدعاء API الفعلي:
-        // try {
-        //     await notificationAPI.delete(idToRemove); 
-        //     setNotifications(notifications.filter(notif => notif.id !== idToRemove));
-        //     showMessage("Notification deleted successfully.", 'success');
-        // } catch(err) {
-        //     showMessage("Failed to delete notification.", 'danger');
-        // }
-
-        // Mock Delete:
-        await new Promise(resolve => setTimeout(resolve, 500)); 
-        setNotifications(notifications.filter(notif => notif.id !== idToRemove));
-        showMessage("Notification deleted successfully. (Mock Delete)", 'success');
-        setLoading(false);
-    };
-
-    const handlePublish = async (e) => {
-        e.preventDefault();
-
-        if (accessPass !== COMMITTEE_PASSWORD) {
-            showMessage("Incorrect password. Access denied.", 'danger');
-            return;
+        setError(null);
+        try {
+            const data = await fetchData('http://localhost:5000/api/comments/all');
+            setAllComments(data);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
         }
-
-        const { title, content } = newNotification;
-        if (!title || !content) {
-            showMessage("Please fill in both the Title and Content fields.", 'warning');
-            return;
-        }
-
-        setLoading(true);
-
-        const notificationData = {
-            ...newNotification,
-            date: new Date().toISOString().split('T')[0],
-        };
-
-        // هنا سيكون استدعاء API الفعلي:
-        // try {
-        //     const response = await notificationAPI.publish(notificationData);
-        //     setNotifications([response.data, ...notifications]);
-        //     showMessage("Notification published successfully!", 'success');
-        // } catch (error) {
-        //     showMessage("Publish Error: " + (error.response?.data?.error || 'Failed to publish notification.'), 'danger');
-        // }
-
-        // Mock Publish:
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        const newId = Date.now();
-        const publishedNotification = { ...notificationData, id: newId };
-        setNotifications([publishedNotification, ...notifications]);
-        setNewNotification({ title: '', content: '', type: 'General' });
-        showMessage("Notification published successfully! (Mock Publish)", 'success');
-        setLoading(false);
-    };
-
-    useEffect(() => {
-        fetchUserInfo();
-        // LTR Design Enforcement
-        document.body.style.direction = 'ltr'; 
     }, []);
 
-    // ------------------------------------------------------------------
-    // Main Render
-    // ------------------------------------------------------------------
+    useEffect(() => {
+        fetchAllComments();
+    }, [fetchAllComments]);
+
+    // Handle Logout function for Navbar
+    const handleLogout = () => {
+        localStorage.clear();
+        navigate('/login');
+    };
+
+    // Filter comments based on the selected level
+    const filteredComments = selectedLevel
+        ? allComments.filter(comment => comment.student_level == selectedLevel)
+        : allComments;
+
+    // Group comments by schedule version for better display
+    const groupedComments = filteredComments.reduce((acc, comment) => {
+        const key = comment.schedule_version_id;
+        if (!acc[key]) {
+            acc[key] = {
+                version_id: key,
+                version_comment: comment.version_comment,
+                level: comment.student_level, // Assuming comments for a version are from same level students
+                comments: []
+            };
+        }
+        acc[key].comments.push(comment);
+        return acc;
+    }, {});
+
 
     return (
-        <div className="min-vh-100" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-            
-            {/* عنوان الصفحة الموحد */}
-            <h1 className="text-center text-white fw-bolder py-3" style={{ background: '#764ba2', margin: 0 }}>
-                SMART SCHEDULE
-            </h1>
-
+        <div className="dashboard-page">
             <Container fluid="lg" className="container-custom shadow-lg">
-                 {/* شريط التنقل الموحد */}
-                 <Navbar expand="lg" variant="dark" className="navbar-custom p-3 navbar-modified">
+                {/* START: Inserted Admin Navbar from Dashboard.jsx */}
+                <Navbar expand="lg" variant="dark" className="navbar-custom p-3">
+                    <Navbar.Brand className="fw-bold fs-5">ADMIN DASHBOARD</Navbar.Brand>
                     <Navbar.Toggle aria-controls="basic-navbar-nav" />
-                    <Navbar.Collapse id="basic-navbar-nav" className="w-100">
-                        <Nav className="me-auto my-2 my-lg-0 nav-menu nav-menu-expanded" style={{ fontSize: '0.9rem' }}>
-                            <Nav.Link onClick={() => navigate('/dashboard')} className="nav-link-custom rounded-2 p-2 mx-1"><FaHome className="me-2" /> HOME</Nav.Link>
-                            <Nav.Link onClick={() => navigate('/manageSchedules')} className="nav-link-custom rounded-2 p-2 mx-1"><FaCalendarAlt className="me-2" /> Manage Schedules & Levels</Nav.Link>
-                            <Nav.Link onClick={() => navigate('/managestudents')} className="nav-link-custom rounded-2 p-2 mx-1"><FaUsers className="me-2" /> Manage Students</Nav.Link>
-                            <Nav.Link onClick={() => navigate('/addElective')} className="nav-link-custom rounded-2 p-2 mx-1"><FaBook className="me-2" /> Course Information</Nav.Link>
-                            <Nav.Link onClick={() => navigate('/managerules')} className="nav-link-custom rounded-2 p-2 mx-1"><FaBalanceScale className="me-2" /> Manage Rules</Nav.Link>
-                            {/* الرابط النشط للصفحة الحالية */}
-                            <Nav.Link onClick={() => navigate('/managenotifications')} className="nav-link-custom active rounded-2 p-2 mx-1"><FaBell className="me-2" /> Manage Notifications</Nav.Link>
+                    <Navbar.Collapse id="basic-navbar-nav">
+                        <Nav className="me-auto my-2 my-lg-0 nav-menu">
+                            <Nav.Link onClick={() => navigate('/dashboard')} className="nav-link-custom"><FaHome className="me-2" /> HOME</Nav.Link>
+                            <Nav.Link onClick={() => navigate('/manageSchedules')} className="nav-link-custom"><FaCalendarAlt className="me-2" /> Schedules</Nav.Link>
+                            <Nav.Link onClick={() => navigate('/managestudents')} className="nav-link-custom"><FaUsers className="me-2" /> Students</Nav.Link>
+                            <Nav.Link onClick={() => navigate('/managerules')} className="nav-link-custom"><FaBalanceScale className="me-2" /> Rules</Nav.Link>
+                            {/* THIS LINK IS NOW ACTIVE */}
+                            <Nav.Link onClick={() => navigate('/managenotifications')} className="nav-link-custom active"><FaBell className="me-2" /> Comments</Nav.Link>
                         </Nav>
-                        <div className="user-section d-flex flex-column align-items-end ms-lg-4 mt-3 mt-lg-0">
-                            <div className="d-flex align-items-center mb-2">
-                                <div className="user-info text-white text-start me-3">
-                                    <div className="user-name fw-bold">{userInfo.name}</div>
-                                    <div className="user-role" style={{ opacity: 0.8, fontSize: '0.8rem' }}>{userInfo.role}</div>
-                                </div>
-                                <Button variant="danger" className="logout-btn fw-bold py-2 px-3" onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/login'); }}>
-                                    <FaSignOutAlt className="me-1" /> Logout
-                                </Button>
+                        <div className="d-flex align-items-center ms-lg-4 mt-3 mt-lg-0">
+                            <div className="text-white text-start me-3">
+                                <div className="fw-bold">{navbarLoading ? '...' : userInfo.name}</div>
+                                <div style={{ opacity: 0.8, fontSize: '0.8rem' }}>{userInfo.role}</div>
                             </div>
-                            <Badge bg="light" text="dark" className="committee-badge p-2 mt-1" style={{ width: 'fit-content' }}>
-                                Admin Dashboard
-                            </Badge>
+                            <Button variant="danger" className="fw-bold" onClick={handleLogout}>
+                                <FaSignOutAlt className="me-1" /> Logout
+                            </Button>
                         </div>
                     </Navbar.Collapse>
                 </Navbar>
+                {/* END: Inserted Admin Navbar from Dashboard.jsx */}
 
 
-                <Card className="shadow-lg border-0 mt-4" style={{ borderRadius: '20px', overflow: 'hidden' }}>
-                    <Card.Header className="text-white text-start py-4" style={{ background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)' }}>
-                        <h1 className="mb-2" style={{ fontSize: '2rem' }}>Manage Notifications</h1>
-                        <p className="mb-0" style={{ opacity: 0.9, fontSize: '1.1rem' }}>
-                            Create and manage system-wide notifications for students and staff.
+                <main className="main-content p-4 p-md-5">
+                    <header className="text-center mb-5">
+                        <h2 className="text-dark fw-bolder mb-3">Manage Student Comments</h2>
+                        <p className="text-secondary fs-6">
+                            Review and manage feedback on generated schedules.
                         </p>
-                    </Card.Header>
+                    </header>
 
-                    <Card.Body className="p-4">
-                        
-                        {message.text && (
-                            <Alert variant={message.type} className="text-start fw-bold">
-                                {message.text}
-                            </Alert>
-                        )}
-                        
-                        {/* 1. قسم إنشاء إشعار جديد */}
-                        <Card className="mb-5 shadow-sm border-primary border-2">
-                            <Card.Header className="bg-primary text-white fw-bold">
-                                <FaBullhorn className="me-2" /> Publish New Notification
-                            </Card.Header>
-                            <Card.Body>
-                                <Form onSubmit={handlePublish}>
-                                    <Row className="g-3 mb-3">
-                                        <Col md={7}>
-                                            <Form.Group>
-                                                <Form.Label className="fw-bold">Title</Form.Label>
-                                                <Form.Control 
-                                                    type="text" 
-                                                    name="title" 
-                                                    value={newNotification.title}
-                                                    onChange={handleInputChange}
-                                                    placeholder="e.g., Voting Deadline Extended"
-                                                    required
-                                                />
-                                            </Form.Group>
-                                        </Col>
-                                        <Col md={5}>
-                                            <Form.Group>
-                                                <Form.Label className="fw-bold">Type/Category</Form.Label>
-                                                <Form.Select 
-                                                    name="type" 
-                                                    value={newNotification.type}
-                                                    onChange={handleInputChange}
-                                                >
-                                                    <option value="General">General</option>
-                                                    <option value="System Update">System Update</option>
-                                                    <option value="Deadline">Deadline</option>
-                                                    <option value="Review Alert">Review Alert</option>
-                                                </Form.Select>
-                                            </Form.Group>
-                                        </Col>
-                                    </Row>
-                                    <Form.Group className="mb-3">
-                                        <Form.Label className="fw-bold">Content</Form.Label>
-                                        <Form.Control 
-                                            as="textarea"
-                                            rows={3}
-                                            name="content" 
-                                            value={newNotification.content}
-                                            onChange={handleInputChange}
-                                            placeholder="Write the full notification message here..."
-                                            required
-                                        />
-                                    </Form.Group>
-                                    
-                                    <Form.Group className="mb-3">
-                                        <Form.Label className="fw-bold">Committee Password (Required to Publish)</Form.Label>
-                                        <Form.Control 
-                                            type="password" 
-                                            value={accessPass}
-                                            onChange={(e) => setAccessPass(e.target.value)}
-                                            required 
-                                        />
-                                    </Form.Group>
-                                    
-                                    <Button 
-                                        type="submit" 
-                                        className="w-100 fw-bold"
-                                        variant="primary"
-                                        disabled={loading}
-                                    >
-                                        {loading ? 'Publishing...' : <><FaSave className="me-2" /> Publish Notification</>}
-                                    </Button>
-                                </Form>
-                            </Card.Body>
-                        </Card>
+                    <Card className="shadow-sm">
+                        <Card.Header className="d-flex align-items-center gap-2 bg-light border-bottom">
+                            <FaBell className="text-primary" />
+                            <h3 className="mb-0 fs-5">Student Feedback on Schedules</h3>
+                        </Card.Header>
+                        <Card.Body>
+                            <Form.Group className="mb-4">
+                                <Form.Label className="fw-bold">Filter Comments by Student Level</Form.Label>
+                                <Form.Select value={selectedLevel} onChange={(e) => setSelectedLevel(e.target.value)}>
+                                    <option value="">Show All Levels</option>
+                                    {academicLevels.map(level => (
+                                        <option key={level} value={level}>Level {level}</option>
+                                    ))}
+                                </Form.Select>
+                            </Form.Group>
 
-                        {/* 2. قسم عرض الإشعارات الحالية */}
-                        <Card className="shadow-sm">
-                            <Card.Header className="bg-light fw-bold">
-                                <FaBell className="me-2 text-primary" /> Active Notifications ({notifications.length})
-                            </Card.Header>
-                            <Card.Body>
-                                {notifications.length === 0 ? (
-                                    <Alert variant="info" className="text-center">No active notifications currently.</Alert>
-                                ) : (
-                                    <ListGroup variant="flush">
-                                        {notifications.map((notif) => (
-                                            <ListGroup.Item key={notif.id} className="d-flex justify-content-between align-items-start py-3">
-                                                <div>
-                                                    <div className="fw-bold text-dark">{notif.title} <Badge bg="secondary" className="ms-2">{notif.type}</Badge></div>
-                                                    <div className="text-muted" style={{ fontSize: '0.9rem' }}>{notif.content}</div>
-                                                    <div className="text-sm text-info mt-1" style={{ fontSize: '0.8rem' }}>Published on: {notif.date}</div>
-                                                </div>
-                                                <Button 
-                                                    variant="outline-danger" 
-                                                    size="sm" 
-                                                    onClick={() => handleDeleteNotification(notif.id)}
-                                                    disabled={loading}
-                                                >
-                                                    <FaTrash className="me-1" /> Delete
-                                                </Button>
-                                            </ListGroup.Item>
-                                        ))}
-                                    </ListGroup>
-                                )}
-                            </Card.Body>
-                        </Card>
-                    </Card.Body>
-                </Card>
+                            {loading ? (
+                                <div className="text-center p-5"><Spinner /></div>
+                            ) : error ? (
+                                <Alert variant="danger">{error}</Alert>
+                            ) : Object.keys(groupedComments).length === 0 ? (
+                                <Alert variant="info" className="text-center">No comments found for the selected level.</Alert>
+                            ) : (
+                                <div className="d-flex flex-column gap-3">
+                                    {Object.values(groupedComments).map(group => (
+                                        <Card key={group.version_id} className="border">
+                                            <Card.Header>
+                                                <strong>Schedule Version:</strong> {group.version_comment || `Version ID ${group.version_id}`}
+                                                <Badge bg="info" className="ms-2">Level {group.level}</Badge>
+                                            </Card.Header>
+                                            <ListGroup variant="flush">
+                                                {group.comments.map(comment => (
+                                                    <ListGroup.Item key={comment.comment_id}>
+                                                        <div className="d-flex justify-content-between">
+                                                            <span className="fw-bold">{comment.student_name} <Badge pill bg="secondary">Lvl {comment.student_level}</Badge></span>
+                                                            <small className="text-muted">{new Date(comment.created_at).toLocaleString()}</small>
+                                                        </div>
+                                                        <p className="mb-0 mt-1">{comment.comment}</p>
+                                                    </ListGroup.Item>
+                                                ))}
+                                            </ListGroup>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
+                        </Card.Body>
+                    </Card>
+                </main>
             </Container>
         </div>
     );

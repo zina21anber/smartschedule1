@@ -1,436 +1,231 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Container, Card, Form, Button, Row, Col, Alert, Navbar, Nav, Badge, Tab, Tabs, Spinner } from 'react-bootstrap';
-import { FaSave, FaPlus, FaTimes, FaHome, FaCalendarAlt, FaUsers, FaBook, FaBalanceScale, FaBell, FaSignOutAlt, FaExclamationTriangle, FaGraduationCap, FaChalkboardTeacher, FaClock } from 'react-icons/fa';
+import { Container, Card, Row, Col, Button, Alert, Spinner, Form, ListGroup, Navbar, Nav } from 'react-bootstrap';
+import { FaHome, FaCalendarAlt, FaUsers, FaBalanceScale, FaBell, FaSignOutAlt, FaPlusCircle, FaListAlt, FaTrash } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
-// import { ruleAPI } from '../services/api'; 
-import '../App.css'; 
+import '../App.css';
 
-const COMMITTEE_PASSWORD = "loadcommittee2025"; 
+// Utility function to handle API requests
+const fetchData = async (url, method = 'GET', body = null) => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(url, {
+        method,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+        body: body ? JSON.stringify(body) : null,
+    });
 
-// تعريف أنواع القواعد المتاحة في كل تبويب
-const RULE_TYPES = {
-    course: [
-        { key: 'min_gpa', label: 'Min GPA for Course' },
-        { key: 'prereq_override', label: 'Prerequisite Override' },
-        { key: 'max_credits_per_level', label: 'Max Credits per Level' },
-    ],
-    faculty: [
-        { key: 'max_load', label: 'Max Teaching Load' },
-        { key: 'min_load', label: 'Min Teaching Load' },
-        { key: 'max_prep', label: 'Max Preparations' },
-    ],
-    schedule: [
-        { key: 'course_time_limit', label: 'Max Duration per Class' },
-        { key: 'max_daily_gap', label: 'Max Daily Gap (Hours)' },
-        { key: 'no_friday_classes', label: 'No Friday Classes' },
-    ],
+    if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        throw new Error("AUTHENTICATION_FAILED");
+    }
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown Error' }));
+        throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
+    }
+
+    return response.json();
 };
-
-// البيانات الوهمية المحدثة (Mock Data)
-const MOCK_RULES = {
-    course: [
-        { rule_id: 1, type: 'min_gpa', value: '2.5', description: 'Minimum GPA required for course selection.' },
-        { rule_id: 2, type: 'max_credits_per_level', value: '18', description: 'Maximum credit hours allowed per level.' },
-    ],
-    faculty: [
-        { rule_id: 3, type: 'max_load', value: '12', description: 'Maximum contact hours for any faculty member.' },
-        { rule_id: 4, type: 'max_prep', value: '4', description: 'Maximum number of unique courses taught by a faculty member.' },
-    ],
-    schedule: [
-        { rule_id: 5, type: 'course_time_limit', value: '1.5', description: 'Maximum duration for a single lecture session (hours).' },
-        { rule_id: 6, type: 'no_friday_classes', value: 'True', description: 'Constraint: No classes should be scheduled on Friday.' },
-    ],
-};
-
 
 const ManageRules = () => {
-    const [rules, setRules] = useState(MOCK_RULES); // يتم استخدام MOCK_RULES للبدء
-    const [newRule, setNewRule] = useState({ type: '', value: '', description: '' });
-    const [activeTab, setActiveTab] = useState('course');
-    const [accessPass, setAccessPass] = useState('');
-    const [message, setMessage] = useState({ text: '', type: '' });
+    const [rules, setRules] = useState([]);
+    const [newRuleText, setNewRuleText] = useState('');
     const [loading, setLoading] = useState(false);
+    const [pageError, setPageError] = useState(null);
+    const [message, setMessage] = useState(null);
     const navigate = useNavigate();
 
-    // Mock user info for Navbar consistency
-    const [userInfo, setUserInfo] = useState({ name: 'Guest', role: 'Loading Committee' });
-    const fetchUserInfo = () => {
-        const storedUser = JSON.parse(localStorage.getItem('user')) || {};
-        if (storedUser.full_name && storedUser.role) {
-            setUserInfo({ name: storedUser.full_name, role: storedUser.role });
-        } else {
-            setUserInfo({ name: 'Committee Member', role: 'Load Committee' });
-        }
-    };
+    // Added minimal state for Navbar user info
+    const [userInfo] = useState({ name: 'Admin User', role: 'Committee Head' });
+    const [navbarLoading] = useState(false);
 
-    // ------------------------------------------------------------------
-    // Handlers
-    // ------------------------------------------------------------------
-
-    const showMessage = (text, type) => {
-        setMessage({ text, type });
-        setTimeout(() => setMessage({ text: '', type: '' }), 4000);
-    };
-
-    const fetchRules = async () => {
+    // Fetch rules from the server
+    const fetchRules = useCallback(async () => {
         setLoading(true);
-        // Mock Fetch:
-        await new Promise(resolve => setTimeout(resolve, 500)); 
-        setRules(MOCK_RULES);
-        setLoading(false);
-    };
-
-    const handleRuleChange = (tab, ruleId, e) => {
-        const { name, value } = e.target;
-        setRules(prevRules => ({
-            ...prevRules,
-            [tab]: prevRules[tab].map(rule => 
-                rule.rule_id === ruleId ? { ...rule, [name]: value } : rule
-            )
-        }));
-    };
-
-    const handleNewRuleChange = (e) => {
-        const { name, value } = e.target;
-        setNewRule(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleAddRule = () => {
-        // تحديد القسم بناءً على نوع القاعدة المختار
-        const ruleTypeKey = newRule.type;
-        const targetTab = Object.keys(RULE_TYPES).find(tab => 
-            RULE_TYPES[tab].some(rule => rule.key === ruleTypeKey)
-        );
-
-        if (!targetTab || !newRule.type || !newRule.description) {
-            showMessage("Please select a valid Rule Type and Description.", 'warning');
-            return;
+        setPageError(null);
+        try {
+            const rulesData = await fetchData('http://localhost:5000/api/rules');
+            setRules(rulesData);
+        } catch (err) {
+            console.error("Error fetching rules:", err);
+            if (err.message === "AUTHENTICATION_FAILED") {
+                navigate('/login');
+                return;
+            }
+            setPageError("Failed to load rules. Please make sure the server is running.");
+        } finally {
+            setLoading(false);
         }
-
-        const ruleToAdd = {
-            ...newRule,
-            rule_id: Date.now(), // يفضل أن يتم تعيينه من الخادم
-        };
-        
-        setRules(prevRules => ({
-            ...prevRules,
-            [targetTab]: [...prevRules[targetTab], ruleToAdd]
-        }));
-        
-        setNewRule({ type: '', value: '', description: '' });
-        setActiveTab(targetTab); // التبديل إلى التبويب الذي تمت فيه الإضافة
-        showMessage(`New rule added to the '${targetTab}' list. Click 'Save All Changes' to apply.`, 'info');
-    };
-
-    const handleRemoveRule = (tab, idToRemove) => {
-        setRules(prevRules => ({
-            ...prevRules,
-            [tab]: prevRules[tab].filter(rule => rule.rule_id !== idToRemove)
-        }));
-        showMessage("Rule removed from the list. Click 'Save All Changes' to apply.", 'info');
-    };
-    
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-
-        if (accessPass !== COMMITTEE_PASSWORD) {
-            showMessage("Incorrect password. Access denied.", 'danger');
-            return;
-        }
-        
-        // التحقق من أن هناك قواعد للحفظ
-        if (Object.values(rules).every(arr => arr.length === 0)) {
-            showMessage("The rule list is empty. Add rules before saving.", 'warning');
-            return;
-        }
-
-
-        setLoading(true);
-
-        // Mock Save:
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        console.log("Saving rules across all tabs:", rules);
-        showMessage("All rules updated and saved successfully! (Mock Save)", 'success');
-        setLoading(false);
-    };
-
+    }, [navigate]);
 
     useEffect(() => {
-        fetchUserInfo();
         fetchRules();
-        // LTR Design Enforcement
-        document.body.style.direction = 'ltr'; 
-    }, []);
+    }, [fetchRules]);
 
-    // ------------------------------------------------------------------
-    // JSX Rendering Components
-    // ------------------------------------------------------------------
-    
-    // مكون فرعي لعرض القواعد في كل تبويب
-    const RuleDisplay = ({ rulesList, tabKey }) => (
-        <>
-            {rulesList.length === 0 ? (
-                <Alert variant="info" className="text-center">
-                    No active rules found for the {tabKey} section.
-                </Alert>
-            ) : (
-                rulesList.map((rule, index) => (
-                    <div key={rule.rule_id} className="p-3 border rounded mb-3 bg-light position-relative">
-                        <Button 
-                            variant="danger" 
-                            size="sm" 
-                            onClick={() => handleRemoveRule(tabKey, rule.rule_id)}
-                            className="position-absolute top-0 end-0 m-2"
-                        >
-                            <FaTimes />
-                        </Button>
-                        <Row className="g-3">
-                            <Col md={4}>
-                                <Form.Group>
-                                    <Form.Label className="fw-bold">Rule Type (Key)</Form.Label>
-                                    <Form.Control 
-                                        type="text" 
-                                        name="type" 
-                                        value={rule.type}
-                                        readOnly
-                                        className="bg-white fw-bold text-primary"
-                                    />
-                                </Form.Group>
-                            </Col>
-                            <Col md={3}>
-                                <Form.Group>
-                                    <Form.Label className="fw-bold">Value</Form.Label>
-                                    <Form.Control 
-                                        type="text" 
-                                        name="value" 
-                                        value={rule.value}
-                                        onChange={(e) => handleRuleChange(tabKey, rule.rule_id, e)}
-                                        required
-                                    />
-                                </Form.Group>
-                            </Col>
-                            <Col md={5}>
-                                <Form.Group>
-                                    <Form.Label className="fw-bold">Description</Form.Label>
-                                    <Form.Control 
-                                        type="text" 
-                                        name="description" 
-                                        value={rule.description}
-                                        onChange={(e) => handleRuleChange(tabKey, rule.rule_id, e)}
-                                        required
-                                    />
-                                </Form.Group>
-                            </Col>
-                        </Row>
-                    </div>
-                ))
-            )}
-        </>
-    );
+    // Handle Logout function for Navbar
+    const handleLogout = () => {
+        localStorage.clear();
+        navigate('/login');
+    };
 
-    // دمج جميع أنواع القواعد المتاحة في قائمة واحدة للإضافة
-    const allRuleTypes = Object.values(RULE_TYPES).flatMap(list => list);
+    // Add new rule
+    const handleAddRule = async (e) => {
+        e.preventDefault();
+        if (!newRuleText.trim()) return;
 
-    // ------------------------------------------------------------------
-    // Main Render
-    // ------------------------------------------------------------------
+        setLoading(true);
+        setPageError(null);
+        setMessage(null);
+        try {
+            await fetchData('http://localhost:5000/api/rules', 'POST', { text: newRuleText });
+            setMessage(`Rule added successfully: ${newRuleText}`);
+            setNewRuleText('');
+            fetchRules();
+        } catch (err) {
+            setPageError(err.message || 'Failed to add rule.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Delete rule
+    const handleDeleteRule = async (ruleId) => {
+        if (!window.confirm("Are you sure you want to delete this rule? This will affect AI scheduling.")) return;
+
+        setLoading(true);
+        setPageError(null);
+        setMessage(null);
+        try {
+            await fetchData(`http://localhost:5000/api/rules/${ruleId}`, 'DELETE');
+            setMessage("Rule deleted successfully.");
+            fetchRules();
+        } catch (err) {
+            setPageError(err.message || 'Failed to delete rule.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
-        <div className="min-vh-100" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-            
-            {/* عنوان الصفحة الموحد */}
-            <h1 className="text-center text-white fw-bolder py-3" style={{ background: '#764ba2', margin: 0 }}>
-                SMART SCHEDULE
-            </h1>
-
+        <div className="dashboard-page">
             <Container fluid="lg" className="container-custom shadow-lg">
-                 {/* شريط التنقل الموحد */}
-                <Navbar expand="lg" variant="dark" className="navbar-custom p-3 navbar-modified">
+                {/* START: Inserted Admin Navbar from Dashboard.jsx */}
+                <Navbar expand="lg" variant="dark" className="navbar-custom p-3">
+                    <Navbar.Brand className="fw-bold fs-5">ADMIN DASHBOARD</Navbar.Brand>
                     <Navbar.Toggle aria-controls="basic-navbar-nav" />
-                    <Navbar.Collapse id="basic-navbar-nav" className="w-100">
-                        {/* القائمة: من اليسار لليمين */}
-                        <Nav className="me-auto my-2 my-lg-0 nav-menu nav-menu-expanded" style={{ fontSize: '0.9rem' }}>
-                            <Nav.Link onClick={() => navigate('/dashboard')} className="nav-link-custom rounded-2 p-2 mx-1">
-                                <FaHome className="me-2" /> HOME
-                            </Nav.Link>
-                            <Nav.Link onClick={() => navigate('/manageSchedules')} className="nav-link-custom rounded-2 p-2 mx-1">
-                                <FaCalendarAlt className="me-2" /> Manage Schedules & Levels
-                            </Nav.Link>
-                            <Nav.Link onClick={() => navigate('/managestudents')} className="nav-link-custom rounded-2 p-2 mx-1">
-                                <FaUsers className="me-2" /> Manage Students
-                            </Nav.Link>
-                            <Nav.Link onClick={() => navigate('/addElective')} className="nav-link-custom rounded-2 p-2 mx-1">
-                                <FaBook className="me-2" /> Course Information
-                            </Nav.Link>
-                            {/* الرابط النشط للصفحة الحالية */}
-                            <Nav.Link onClick={() => navigate('/managerules')} className="nav-link-custom active rounded-2 p-2 mx-1">
-                                <FaBalanceScale className="me-2" /> Manage Rules
-                            </Nav.Link>
-                            {/* 🚀 التعديل هنا: ربط Notifications */}
-                            <Nav.Link onClick={() => navigate('/managenotifications')} className="nav-link-custom rounded-2 p-2 mx-1">
-                                <FaBell className="me-2" /> Manage Notifications
-                            </Nav.Link>
+                    <Navbar.Collapse id="basic-navbar-nav">
+                        <Nav className="me-auto my-2 my-lg-0 nav-menu">
+                            <Nav.Link onClick={() => navigate('/dashboard')} className="nav-link-custom"><FaHome className="me-2" /> HOME</Nav.Link>
+                            <Nav.Link onClick={() => navigate('/manageSchedules')} className="nav-link-custom"><FaCalendarAlt className="me-2" /> Schedules</Nav.Link>
+                            <Nav.Link onClick={() => navigate('/managestudents')} className="nav-link-custom"><FaUsers className="me-2" /> Students</Nav.Link>
+                            {/* THIS LINK IS NOW ACTIVE */}
+                            <Nav.Link onClick={() => navigate('/managerules')} className="nav-link-custom active"><FaBalanceScale className="me-2" /> Rules</Nav.Link>
+                            <Nav.Link onClick={() => navigate('/managenotifications')} className="nav-link-custom"><FaBell className="me-2" /> Comments</Nav.Link>
                         </Nav>
-
-                        {/* قسم المستخدم وزر الخروج و Admin Dashboard (تحتها) */}
-                        <div className="user-section d-flex flex-column align-items-end ms-lg-4 mt-3 mt-lg-0">
-                            <div className="d-flex align-items-center mb-2">
-                                <div className="user-info text-white text-start me-3">
-                                    <div className="user-name fw-bold">{userInfo.name}</div>
-                                    <div className="user-role" style={{ opacity: 0.8, fontSize: '0.8rem' }}>{userInfo.role}</div>
-                                </div>
-                                <Button variant="danger" className="logout-btn fw-bold py-2 px-3" onClick={() => {
-                                    localStorage.removeItem('token');
-                                    localStorage.removeItem('user');
-                                    navigate('/login');
-                                }}>
-                                    <FaSignOutAlt className="me-1" /> Logout
-                                </Button>
+                        <div className="d-flex align-items-center ms-lg-4 mt-3 mt-lg-0">
+                            <div className="text-white text-start me-3">
+                                <div className="fw-bold">{navbarLoading ? '...' : userInfo.name}</div>
+                                <div style={{ opacity: 0.8, fontSize: '0.8rem' }}>{userInfo.role}</div>
                             </div>
-                            {/* Admin Dashboard تحت زر Logout */}
-                            <Badge bg="light" text="dark" className="committee-badge p-2 mt-1" style={{ width: 'fit-content' }}>
-                                Admin Dashboard
-                            </Badge>
+                            <Button variant="danger" className="fw-bold" onClick={handleLogout}>
+                                <FaSignOutAlt className="me-1" /> Logout
+                            </Button>
                         </div>
                     </Navbar.Collapse>
                 </Navbar>
-                {/* نهاية شريط التنقل الموحد */}
+                {/* END: Inserted Admin Navbar from Dashboard.jsx */}
 
 
-                <Card className="shadow-lg border-0 mt-4" style={{ borderRadius: '20px', overflow: 'hidden' }}>
-                    <Card.Header className="text-white text-start py-4" style={{ background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)' }}>
-                        <h1 className="mb-2" style={{ fontSize: '2rem' }}>System Rule Management</h1>
-                        <p className="mb-0" style={{ opacity: 0.9, fontSize: '1.1rem' }}>
-                            Define and update the core constraints across Course, Faculty, and Schedule sections.
+                <main className="main-content p-4 p-md-5">
+                    <header className="text-center mb-5">
+                        <h2 className="text-dark fw-bolder mb-3">AI Scheduling Constraints (for Gemini)</h2>
+                        <p className="text-secondary fs-6">
+                           Manage the rules and constraints the AI system uses when generating or updating schedules.
                         </p>
-                    </Card.Header>
+                    </header>
 
-                    <Card.Body className="p-4">
-                        
-                        {message.text && (
-                            <Alert variant={message.type} className="text-start fw-bold">
-                                {message.text}
-                            </Alert>
-                        )}
-                        
-                        <Form onSubmit={handleSubmit}>
-                            {/* قسم إضافة قاعدة جديدة (مع اختيار النوع) */}
-                            <Card className="mb-4 shadow-sm border-success border-2">
-                                <Card.Header className="bg-success text-white fw-bold">
-                                    <FaPlus className="me-2" /> Add New Rule
-                                </Card.Header>
-                                <Card.Body>
-                                    <Row className="g-3 align-items-end">
-                                        <Col md={5}>
-                                            <Form.Group>
-                                                <Form.Label className="fw-bold">Rule Type</Form.Label>
-                                                <Form.Select 
-                                                    name="type" 
-                                                    value={newRule.type}
-                                                    onChange={handleNewRuleChange}
-                                                    required
-                                                >
-                                                    <option value="" disabled>Select Rule Type</option>
-                                                    {allRuleTypes.map(type => (
-                                                        <option key={type.key} value={type.key}>{type.label} ({type.key})</option>
-                                                    ))}
-                                                </Form.Select>
-                                            </Form.Group>
-                                        </Col>
-                                        <Col md={3}>
-                                            <Form.Group>
-                                                <Form.Label className="fw-bold">Value</Form.Label>
-                                                <Form.Control 
-                                                    type="text" 
-                                                    name="value" 
-                                                    value={newRule.value}
-                                                    onChange={handleNewRuleChange}
-                                                    placeholder="e.g., 18 or True"
-                                                />
-                                            </Form.Group>
-                                        </Col>
-                                        <Col md={4}>
-                                            <Form.Group>
-                                                <Form.Label className="fw-bold">Description</Form.Label>
-                                                <Form.Control 
-                                                    type="text" 
-                                                    name="description" 
-                                                    value={newRule.description}
-                                                    onChange={handleNewRuleChange}
-                                                    required
-                                                    placeholder="Short explanation of the rule"
-                                                />
-                                            </Form.Group>
-                                        </Col>
-                                    </Row>
-                                    <Button 
-                                        type="button" 
-                                        onClick={handleAddRule} 
-                                        className="w-100 mt-3 fw-bold"
-                                        variant="outline-success"
-                                        disabled={!newRule.type || !newRule.description}
-                                    >
-                                        <FaPlus className="me-2" /> Add Rule to List
-                                    </Button>
-                                </Card.Body>
-                            </Card>
+                    {message && <Alert variant="success" className="mt-3 text-center">{message}</Alert>}
+                    {pageError && <Alert variant="danger" className="mt-3 text-center">{pageError}</Alert>}
 
-                            {/* قسم عرض وتعديل القواعد الحالية (مقسمة بتبويبات) */}
-                            <Card className="shadow-sm">
-                                <Card.Header className="bg-light fw-bold">
-                                    <FaBalanceScale className="me-2 text-primary" /> Current Active Rules
-                                </Card.Header>
-                                <Card.Body>
-                                    {loading ? (
-                                        <div className="text-center p-5"><Spinner animation="border" variant="primary" /> <p className="mt-2">Loading rules...</p></div>
-                                    ) : (
-                                        <Tabs
-                                            id="rule-tabs"
-                                            activeKey={activeTab}
-                                            onSelect={(k) => setActiveTab(k)}
-                                            className="mb-3"
+                    {/* Add new rule */}
+                    <Card className="shadow-lg mb-6 border-primary border-2">
+                        <Card.Header className="bg-primary text-white py-3">
+                            <h4 className="mb-0 d-flex align-items-center text-xl font-bold">
+                                <FaPlusCircle className="me-2" /> Add New Rule
+                            </h4>
+                        </Card.Header>
+                        <Card.Body>
+                            <Form onSubmit={handleAddRule}>
+                                <Row className="align-items-end">
+                                    <Col md={9}>
+                                        <Form.Group className="mb-3">
+                                            <Form.Label className='fw-bold'>
+                                                Rule Text (Example: Core lectures must be scheduled before 12:00 PM)
+                                            </Form.Label>
+                                            <Form.Control
+                                                as="textarea"
+                                                rows={3}
+                                                value={newRuleText}
+                                                onChange={(e) => setNewRuleText(e.target.value)}
+                                                disabled={loading}
+                                                required
+                                            />
+                                        </Form.Group>
+                                    </Col>
+                                    <Col md={3}>
+                                        <Button variant="success" type="submit" className="w-100 py-2" disabled={loading}>
+                                            {loading ? <Spinner size="sm" animation="border" className="me-2" /> : <FaPlusCircle className="me-2" />} Add & Save
+                                        </Button>
+                                    </Col>
+                                </Row>
+                            </Form>
+                        </Card.Body>
+                    </Card>
+
+                    {/* Display existing rules */}
+                    <Card className="shadow-lg">
+                        <Card.Header className="bg-light py-3">
+                            <h4 className="mb-0 d-flex align-items-center text-dark text-xl font-bold">
+                                <FaListAlt className="me-2" /> Active Rules ({rules.length})
+                            </h4>
+                        </Card.Header>
+                        <Card.Body>
+                            {loading ? (
+                                <div className="text-center p-5">
+                                    <Spinner animation="border" variant="primary" />
+                                </div>
+                            ) : rules.length === 0 ? (
+                                <Alert variant="info" className="text-center">
+                                    No rules have been added yet for AI scheduling.
+                                </Alert>
+                            ) : (
+                                <ListGroup as="ol" numbered>
+                                    {rules.map(rule => (
+                                        <ListGroup.Item
+                                            key={rule.rule_id}
+                                            className="d-flex justify-content-between align-items-center"
                                         >
-                                            <Tab eventKey="course" title={<><FaGraduationCap className="me-1" /> Course Rules</>}>
-                                                <RuleDisplay rulesList={rules.course} tabKey="course" />
-                                            </Tab>
-                                            <Tab eventKey="faculty" title={<><FaChalkboardTeacher className="me-1" /> Faculty Rules</>}>
-                                                <RuleDisplay rulesList={rules.faculty} tabKey="faculty" />
-                                            </Tab>
-                                            <Tab eventKey="schedule" title={<><FaClock className="me-1" /> Schedule Rules</>}>
-                                                <RuleDisplay rulesList={rules.schedule} tabKey="schedule" />
-                                            </Tab>
-                                        </Tabs>
-                                    )}
-                                </Card.Body>
-                            </Card>
-
-
-                            <Form.Group className="mt-4 mb-3">
-                                <Form.Label className="fw-bold">Committee Password (Required to Save)</Form.Label>
-                                <Form.Control 
-                                    type="password" 
-                                    value={accessPass}
-                                    onChange={(e) => setAccessPass(e.target.value)}
-                                    required 
-                                />
-                            </Form.Group>
-                            
-                            <Button 
-                                type="submit" 
-                                className="w-100 fw-bold mt-3"
-                                variant="primary"
-                                disabled={loading || Object.values(rules).every(arr => arr.length === 0)}
-                            >
-                                {loading ? 'Saving Changes...' : <><FaSave className="me-2" /> Save All Changes</>}
-                            </Button>
-
-                            <Alert variant="info" className="mt-3 d-flex align-items-center">
-                                <FaExclamationTriangle className="me-2" />
-                                Note: Changing system rules will affect future schedule generation.
-                            </Alert>
-                        </Form>
-                    </Card.Body>
-                </Card>
+                                            <div className="ms-2 me-auto">
+                                                <div className="fw-semibold">{rule.text}</div>
+                                            </div>
+                                            <Button
+                                                variant="danger"
+                                                size="sm"
+                                                onClick={() => handleDeleteRule(rule.rule_id)}
+                                                disabled={loading}
+                                            >
+                                                <FaTrash className='me-1' /> Delete
+                                            </Button>
+                                        </ListGroup.Item>
+                                    ))}
+                                </ListGroup>
+                            )}
+                        </Card.Body>
+                    </Card>
+                </main>
             </Container>
         </div>
     );
