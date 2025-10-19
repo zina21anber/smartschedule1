@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Container, Row, Col, Card, Navbar, Nav, Button, Spinner, Alert, ListGroup, Table, Form } from 'react-bootstrap';
+import { Container, Row, Col, Card, Navbar, Nav, Button, Spinner, Alert, ListGroup, Table, Form, Badge } from 'react-bootstrap';
 import { FaUserGraduate, FaBook, FaCalendarAlt, FaVoteYea, FaHome, FaSignOutAlt, FaChartLine, FaSave, FaComment, FaArrowCircleRight, FaPaperPlane } from 'react-icons/fa';
 import '../App.css';
 
-// Generic fetchData function
 const fetchData = async (url, method = 'GET', body = null) => {
     const token = localStorage.getItem('token');
     const options = {
@@ -24,7 +23,30 @@ const fetchData = async (url, method = 'GET', body = null) => {
     return data;
 };
 
-// --- Schedule Viewer Component (Simplified for Comment Test) ---
+
+const NewStudentNavbar = ({ userInfo, navigate, activePath }) => (
+    <Container fluid="lg" className="container-custom shadow-lg">
+        <Navbar expand="lg" variant="dark" className="navbar-custom p-3" style={{ backgroundColor: '#2a5298' }}>
+            <Navbar.Brand className="fw-bold fs-5">STUDENT DASHBOARD</Navbar.Brand>
+            <Navbar.Toggle aria-controls="basic-navbar-nav" />
+            <Navbar.Collapse id="basic-navbar-nav">
+                <Nav className="me-auto my-2 my-lg-0 nav-menu">
+                    <Nav.Link onClick={() => navigate('/student-dashboard')} className={`nav-link-custom ${activePath === '/student-dashboard' ? 'active' : ''}`}><FaHome className="me-2" /> DASHBOARD</Nav.Link>
+                    <Nav.Link onClick={() => navigate('/elective-voting')} className={`nav-link-custom ${activePath === '/elective-voting' ? 'active' : ''}`}><FaVoteYea className="me-2" /> VOTING</Nav.Link>
+                </Nav>
+                <div className="d-flex align-items-center ms-lg-4 mt-3 mt-lg-0">
+                    <div className="user-info text-white text-start me-3">
+                        <div className="user-name fw-bold">{userInfo.name}</div>
+                        <div className="user-role" style={{ opacity: 0.8, fontSize: '0.8rem' }}>{userInfo.email}</div>
+                    </div>
+                    <Button variant="danger" className="logout-btn fw-bold" onClick={() => { localStorage.clear(); navigate('/login'); }}>
+                        <FaSignOutAlt className="me-1" /> Logout
+                    </Button>
+                </div>
+            </Navbar.Collapse>
+        </Navbar>
+    </Container>
+);
 const ScheduleViewer = ({ level, token, studentId }) => {
     const [schedule, setSchedule] = useState(null);
     const [allCourses, setAllCourses] = useState([]);
@@ -90,9 +112,7 @@ const ScheduleViewer = ({ level, token, studentId }) => {
     if (error) return <Alert variant="warning" className="text-center mt-4">{error}</Alert>;
     if (!schedule) return <Alert variant="info" className="text-center mt-4">No active schedule for Level {level}.</Alert>;
 
-    // Table rendering logic... (unchanged)
     const renderTable = () => {
-        // ... (The full table rendering logic goes here)
         const scheduleMap = {};
         const sectionsArray = schedule.sections && typeof schedule.sections === 'string' ? JSON.parse(schedule.sections) : (Array.isArray(schedule.sections) ? schedule.sections : []);
         sectionsArray.forEach(sec => {
@@ -117,7 +137,8 @@ const ScheduleViewer = ({ level, token, studentId }) => {
 
     return (
         <Card className="mt-4 shadow-sm">
-            <Card.Header className="bg-primary text-white"><h4 className="mb-0">Active Schedule for Level {level}</h4></Card.Header>
+            {/* ✅ توحيد ترويسة البطاقة - خلفية زرقاء فاتحة */}
+            <Card.Header className="bg-light"><h4 className="mb-0 d-flex align-items-center"><FaCalendarAlt className="me-2 text-primary" /> Active Schedule for Level {level}</h4></Card.Header>
             <Card.Body>{renderTable()}</Card.Body>
             <Card.Footer>
                 <Form onSubmit={handleCommentSubmit}>
@@ -139,7 +160,6 @@ const ScheduleViewer = ({ level, token, studentId }) => {
     );
 };
 
-// --- Main StudentDashboard Component ---
 function StudentDashboard() {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -151,8 +171,10 @@ function StudentDashboard() {
         if (!userStr) { navigate('/login'); return; }
         try {
             const userData = JSON.parse(userStr);
-            // Assuming the user object has an 'id' property for studentId
-            if (userData && userData.email && userData.id) { setUser(userData); }
+            if (userData && userData.email) { 
+                setUser(userData); 
+                setViewingLevel(userData.level);
+            }
             else { throw new Error("Invalid user data in storage."); }
         } catch (err) {
             console.error("Failed to parse user data:", err);
@@ -161,6 +183,12 @@ function StudentDashboard() {
             setLoading(false);
         }
     }, [navigate]);
+        useEffect(() => {
+        if (!loading && user && !viewingLevel) {
+            setViewingLevel(user.level);
+        }
+    }, [loading, user, viewingLevel]);
+
 
     const handleLogout = () => {
         if (window.confirm('Are you sure you want to logout?')) {
@@ -175,36 +203,23 @@ function StudentDashboard() {
 
     return (
         <div className="dashboard-page">
-            <Container fluid="lg" className="container-custom shadow-lg">
-                <Navbar expand="lg" variant="dark" className="navbar-custom p-3">
-                    <Navbar.Brand className="fw-bold fs-5">STUDENT PORTAL</Navbar.Brand> {/* Changed to STUDENT PORTAL for consistency */}
-                    <Navbar.Toggle aria-controls="basic-navbar-nav" />
-                    <Navbar.Collapse id="basic-navbar-nav">
-                        <Nav className="me-auto my-2 my-lg-0 nav-menu">
-                            {/* THIS LINK IS NOW ACTIVE */}
-                            <Nav.Link onClick={() => navigate('/student-dashboard')} className="nav-link-custom active"><FaHome className="me-2" /> DASHBOARD</Nav.Link>
-                            {/* Added missing links from ElectiveVoting Navbar for consistency */}
-                            <Nav.Link onClick={() => navigate('/elective-voting')} className="nav-link-custom"><FaVoteYea className="me-2" /> Elective Voting</Nav.Link>
-                        </Nav>
-                        <div className="d-flex align-items-center ms-lg-4 mt-3 mt-lg-0">
-                            <div className="user-info text-white text-start me-3">
-                                <div className="user-name fw-bold">{user.name}</div>
-                                <div className="user-role" style={{ opacity: 0.8, fontSize: '0.8rem' }}>{user.email}</div>
-                            </div>
-                            <Button variant="danger" className="logout-btn fw-bold" onClick={handleLogout}>
-                                <FaSignOutAlt className="me-1" /> Logout
-                            </Button>
-                        </div>
-                    </Navbar.Collapse>
-                </Navbar>
+            {/* ✅ استخدام الـ Navbar الموحد الجديد */}
+            <NewStudentNavbar userInfo={user} navigate={navigate} activePath='/student-dashboard' />
 
-                <main className="main-content p-4 p-md-5">
-                    <header className="welcome-section text-center mb-5">
-                        <h2 className="text-dark fw-bolder mb-3">Welcome, {user.name}!</h2>
-                    </header>
-                    <section className="bg-white rounded-4 p-4 p-md-5 shadow-sm">
-                        <h3 className="text-dark mb-3 d-flex align-items-center"><FaCalendarAlt className="me-2 text-primary" /> View Schedules</h3>
+            <main className="main-content p-4 p-md-5">
+                {/* ✅ توحيد ترويسة الصفحة الرئيسية */}
+                <Card className="shadow-lg border-0" style={{ borderRadius: '20px', overflow: 'hidden' }}>
+                    <Card.Header className="text-white text-start py-4" style={{ background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)' }}>
+                        <h1 className="mb-2" style={{ fontSize: '2rem' }}>Student Dashboard</h1>
+                        <p className="mb-0" style={{ opacity: 0.9, fontSize: '1.1rem' }}>
+                            Welcome, {user.name}! Your dedicated portal for schedule and elective management.
+                        </p>
+                    </Card.Header>
+
+                    <Card.Body className="p-4 p-md-5">
+                        <h3 className="text-dark mb-4 d-flex align-items-center"><FaCalendarAlt className="me-2 text-primary" /> View Schedules</h3>
                         <p className="text-muted mb-4">You are currently in Level {user.level}. Select a schedule to view and add comments.</p>
+                        
                         <div className="d-flex flex-wrap gap-2">
                             <Button
                                 variant={viewingLevel === user.level ? 'primary' : 'outline-primary'}
@@ -212,17 +227,19 @@ function StudentDashboard() {
                             >
                                 View My Current Level ({user.level}) Schedule
                             </Button>
-                            <Button
-                                variant={viewingLevel === user.level + 1 ? 'primary' : 'outline-primary'}
-                                onClick={() => setViewingLevel(user.level + 1)}
-                            >
-                                Preview Next Level ({user.level + 1}) Schedule <FaArrowCircleRight className="ms-1" />
-                            </Button>
+                            {user.level < 8 && (
+                                <Button
+                                    variant={viewingLevel === user.level + 1 ? 'primary' : 'outline-primary'}
+                                    onClick={() => setViewingLevel(user.level + 1)}
+                                >
+                                    Preview Next Level ({user.level + 1}) Schedule <FaArrowCircleRight className="ms-1" />
+                                </Button>
+                            )}
                         </div>
                         {viewingLevel && <ScheduleViewer level={viewingLevel} token={localStorage.getItem('token')} studentId={user.id} />}
-                    </section>
-                </main>
-            </Container>
+                    </Card.Body>
+                </Card>
+            </main>
         </div>
     );
 }

@@ -4,8 +4,6 @@ import { Container, Row, Col, Card, Navbar, Nav, Button, Badge, Spinner, Alert, 
 import { FaUsers, FaCheckCircle, FaComments, FaVoteYea, FaBell, FaCalendarAlt, FaBook, FaBalanceScale, FaHome, FaSignOutAlt, FaUserGraduate } from 'react-icons/fa';
 import { useNavigate, Link } from 'react-router-dom';
 import '../App.css';
-
-// Generic fetchData function
 const fetchData = async (url, method = 'GET', body = null) => {
   const token = localStorage.getItem('token');
   const options = {
@@ -22,7 +20,6 @@ const fetchData = async (url, method = 'GET', body = null) => {
   return response.json();
 };
 
-// --- Sub-Components ---
 const StatCard = ({ icon, number, label, description, loading }) => (
   <Card className="shadow-sm stat-card-custom h-100 border-0"><Card.Body className="d-flex flex-column align-items-center justify-content-center p-3 p-md-4">{icon}<div className="stat-number-custom my-2">{loading ? <Spinner animation="border" size="sm" /> : number}</div><div className="stat-label text-dark fw-bold mb-1">{label}</div><p className="stat-description text-muted text-center" style={{ fontSize: '0.9rem' }}>{description}</p></Card.Body></Card>
 );
@@ -30,7 +27,6 @@ const NotificationItem = ({ notification }) => (
   <div className="notification-item-custom bg-light rounded p-3 mb-3"><div className="d-flex justify-content-between align-items-center mb-1"><span className="notification-title fw-bold text-dark">{notification.title}</span><span className="notification-time text-muted" style={{ fontSize: '0.8rem' }}>{notification.time}</span></div><div className="notification-content text-secondary" style={{ lineHeight: '1.5', fontSize: '0.9rem' }}>{notification.content}</div></div>
 );
 
-// --- Self-Contained Voting Results Component ---
 const VotingResults = () => {
   const [allResults, setAllResults] = useState([]);
   const [approvedByLevel, setApprovedByLevel] = useState({});
@@ -321,7 +317,6 @@ const VotingResults = () => {
   );
 };
 
-// --- Main Dashboard Component ---
 const Dashboard = () => {
   const [stats, setStats] = useState({ totalStudents: '...', votingStudents: '...', totalComments: '...', totalVotes: '...', participationRate: '...' });
   const [userInfo, setUserInfo] = useState({ name: 'Guest', role: 'Loading...' });
@@ -383,7 +378,7 @@ const Dashboard = () => {
               <Nav.Link onClick={() => navigate('/managestudents')} className="nav-link-custom"><FaUsers className="me-2" /> Students</Nav.Link>
               <Nav.Link onClick={() => navigate('/managerules')} className="nav-link-custom"><FaBalanceScale className="me-2" /> Rules</Nav.Link>
               {/* ✅✅✅ THE FIX IS HERE: ADDED THE MISSING LINK ✅✅✅ */}
-              <Nav.Link onClick={() => navigate('/managenotifications')} className="nav-link-custom"><FaBell className="me-2" /> Comments</Nav.Link>
+              <Nav.Link onClick={() => navigate('/managenotifications')} className="nav-link-custom"><FaBell className="me-2" /> Notification</Nav.Link>
             </Nav>
             <div className="d-flex align-items-center ms-lg-4 mt-3 mt-lg-0">
               <div className="text-white text-start me-3">
