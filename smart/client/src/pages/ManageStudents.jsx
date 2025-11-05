@@ -1,13 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Container, Card, Form, Button, Alert, Row, Col, Badge, Spinner, Navbar, Nav } from 'react-bootstrap';
-import { FaArrowRight, FaUserGraduate, FaSave, FaUndo, FaTrash, FaHome, FaCalendarAlt, FaUsers, FaBook, FaBalanceScale, FaBell, FaSignOutAlt } from 'react-icons/fa';
+import { FaArrowRight, FaUserGraduate, FaSave, FaUndo, FaTrash, FaHome, FaCalendarAlt, FaUsers, FaBook, FaBalanceScale, FaBell, FaSignOutAlt, FaFilter, FaCheckCircle, FaSearch } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { studentAPI } from '../services/api'; 
 import '../App.css'; 
-
-const MOCK_STUDENTS = [
-    { student_id: '4390011', name: 'Mohammed Ali', level: 5, is_ir: true },
-];
 
 const NewCommitteeNavbar = ({ userInfo, navigate, activePath }) => (
     <Container fluid="lg" className="container-custom shadow-lg">
@@ -19,11 +15,9 @@ const NewCommitteeNavbar = ({ userInfo, navigate, activePath }) => (
                     <Nav.Link onClick={() => navigate('/dashboard')} className={`nav-link-custom ${activePath === '/dashboard' ? 'active' : ''}`}><FaHome className="me-2" /> HOME</Nav.Link>
                     <Nav.Link onClick={() => navigate('/manageSchedules')} className={`nav-link-custom ${activePath === '/manageSchedules' ? 'active' : ''}`}><FaCalendarAlt className="me-2" /> Schedules</Nav.Link>
                     <Nav.Link onClick={() => navigate('/managestudents')} className={`nav-link-custom ${activePath === '/managestudents' ? 'active' : ''}`}><FaUsers className="me-2" /> Students</Nav.Link>
-                    {/* 👇 تم ربط "Course Information" بـ /addElective 👇 */}
                     <Nav.Link onClick={() => navigate('/addElective')} className={`nav-link-custom ${activePath === '/addElective' ? 'active' : ''}`}><FaBook className="me-2" /> Course Information</Nav.Link>
-                    {/* 👆 تم ربط "Course Information" بـ /addElective 👆 */}
                     <Nav.Link onClick={() => navigate('/managerules')} className={`nav-link-custom ${activePath === '/managerules' ? 'active' : ''}`}><FaBalanceScale className="me-2" /> Rules</Nav.Link>
-                    <Nav.Link onClick={() => navigate('/managenotifications')} className={`nav-link-custom ${activePath === '/managenotifications' ? 'active' : ''}`}><FaBell className="me-2" />Notification</Nav.Link>
+                    <Nav.Link onClick={() => navigate('/managenotifications')} className={`nav-link-custom ${activePath === '/managenotifications' ? 'active' : ''}`}><FaBell className="me-2" /> Notification</Nav.Link>
                 </Nav>
                 
                 <div className="d-flex align-items-center ms-lg-4 mt-3 mt-lg-0">
@@ -41,7 +35,7 @@ const NewCommitteeNavbar = ({ userInfo, navigate, activePath }) => (
 );
 
 const ManageStudents = () => {
-    const [students, setStudents] = useState(MOCK_STUDENTS); 
+    const [students, setStudents] = useState([]); 
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         studentId: '',
@@ -54,6 +48,11 @@ const ManageStudents = () => {
 
     const levels = [3, 4, 5, 6, 7, 8];
     const [userInfo, setUserInfo] = useState({ name: 'Committee Member', role: 'Load Committee' });
+
+    const [filterLevel, setFilterLevel] = useState(''); 
+    const [filterIRStatus, setFilterIRStatus] = useState(''); 
+    const [appliedFilterLevel, setAppliedFilterLevel] = useState('');
+    const [appliedFilterIRStatus, setAppliedFilterIRStatus] = useState('');
 
     const showMessage = (text, type) => {
         setMessage({ text, type });
@@ -70,30 +69,63 @@ const ManageStudents = () => {
 
     const fetchUserInfo = useCallback(() => {
         const storedUser = JSON.parse(localStorage.getItem('user')) || {};
-        if (storedUser.full_name && storedUser.role) {
+        if (storedUser.name && storedUser.role) {
+            setUserInfo({ name: storedUser.name, role: storedUser.role });
+        } else if (storedUser.full_name && storedUser.role) {
             setUserInfo({ name: storedUser.full_name, role: storedUser.role });
         }
     }, []);
+
     const fetchAllStudents = useCallback(async () => {
+        if (!appliedFilterLevel && appliedFilterIRStatus === '') {
+             setStudents([]);
+             return;
+        }
+
         setLoading(true);
         setError(null);
         try {
-            const response = await studentAPI.getAll(); 
-            setStudents(response.data || MOCK_STUDENTS); 
+            const params = {};
+            
+            if (appliedFilterLevel) {
+                params.level = appliedFilterLevel;
+            }
+            
+            if (appliedFilterIRStatus !== '') {
+                params.is_ir = appliedFilterIRStatus === 'true';
+            }
+            
+            const response = await studentAPI.getAll({ params }); 
+            
+            setStudents(response.data || []); 
         } catch (err) {
             console.error('Error fetching students:', err.response || err);
-            setStudents(MOCK_STUDENTS); 
-            setError('Failed to load student data. Displaying mock data.');
+            const errMsg = err.response?.data?.error || 'Failed to load student data.';
+            setStudents([]); 
+            setError(errMsg);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [appliedFilterLevel, appliedFilterIRStatus]); 
 
     useEffect(() => {
         fetchUserInfo();
-        fetchAllStudents();
         document.body.style.direction = 'ltr';
-    }, [fetchAllStudents, fetchUserInfo]);
+    }, [fetchUserInfo]);
+    
+    useEffect(() => {
+        fetchAllStudents();
+    }, [fetchAllStudents]);
+
+    const handleApplyFilters = () => {
+        if (!filterLevel && filterIRStatus === '') {
+            showMessage('Please select at least one filter.', 'warning');
+            return;
+        }
+        setAppliedFilterLevel(filterLevel);
+        setAppliedFilterIRStatus(filterIRStatus);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -105,17 +137,19 @@ const ManageStudents = () => {
         }
 
         try {
-            const newStudentData = {
-                studentId: studentId,
-                studentName: studentName,
-                level: parseInt(currentLevel),
+            const dataForServer = {
                 email: `${studentId}@student.ksu.edu.sa`,
                 password: 'ksu_default_pwd',
-                is_ir: true,
+                name: studentName,
+                level: parseInt(currentLevel),
+                is_ir: true, 
             };
 
-            await studentAPI.create(newStudentData);
-            fetchAllStudents();
+            await studentAPI.create(dataForServer);
+            
+            if(appliedFilterLevel === currentLevel) {
+                 fetchAllStudents();
+            }
 
             setFormData({
                 studentId: '',
@@ -131,6 +165,7 @@ const ManageStudents = () => {
             showMessage(errMsg, 'danger');
         }
     };
+    
     const deleteStudent = async (studentId) => {
         if (window.confirm('Are you sure you want to delete this student?')) {
             try {
@@ -144,6 +179,7 @@ const ManageStudents = () => {
             }
         }
     };
+    
     const saveStudentChanges = async (studentId, newLevel) => {
         const studentToUpdate = students.find(s => s.student_id === studentId);
         if (!studentToUpdate) return;
@@ -166,13 +202,11 @@ const ManageStudents = () => {
 
     return (
         <div className="min-vh-100" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-            {/* ✅ استخدام الـ Navbar الموحد الجديد */}
             <NewCommitteeNavbar userInfo={userInfo} navigate={navigate} activePath='/managestudents' />
             
             <Container fluid="lg" className="py-4">
                 <Card className="shadow-lg border-0" style={{ borderRadius: '20px', overflow: 'hidden' }}>
                     
-                    {/* ✅ استبدال الـ Card.Header القديم بعنوان الصفحة الجديد (بدون زر Back) */}
                     <Card.Header className="text-white text-start py-4" style={{ background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)' }}>
                         <h1 className="mb-2" style={{ fontSize: '2rem' }}>Student Account Management</h1>
                         <p className="mb-0" style={{ opacity: 0.9, fontSize: '1.1rem' }}>
@@ -260,6 +294,62 @@ const ManageStudents = () => {
                                 </Form>
                             </Card.Body>
                         </Card>
+                        
+                        <Card className="mb-4 shadow-sm" style={{ borderRadius: '12px' }}>
+                            <Card.Body className="p-4">
+                                <h3 className="mb-4 d-flex align-items-center">
+                                    <FaFilter className="me-2 text-primary" style={{ fontSize: '1.5rem' }} />
+                                    Filter Student List
+                                </h3>
+                                <Row className="g-3 align-items-end">
+                                    <Col md={5}>
+                                        <Form.Group>
+                                            <Form.Label className="fw-bold">Filter by Level</Form.Label>
+                                            <Form.Select
+                                                value={filterLevel}
+                                                onChange={(e) => setFilterLevel(e.target.value)}
+                                            >
+                                                <option value="">All Levels</option>
+                                                {levels.map(level => (
+                                                    <option key={level} value={level}>Level {level}</option>
+                                                ))}
+                                            </Form.Select>
+                                        </Form.Group>
+                                    </Col>
+
+                                    <Col md={5}>
+                                        <Form.Group>
+                                            <Form.Label className="fw-bold">Filter by IR Status</Form.Label>
+                                            <Form.Select
+                                                value={filterIRStatus}
+                                                onChange={(e) => setFilterIRStatus(e.target.value)}
+                                            >
+                                                <option value="">All Statuses</option>
+                                                <option value="true">IR Students Only</option>
+                                                <option value="false">Non-IR Students Only</option>
+                                            </Form.Select>
+                                        </Form.Group>
+                                    </Col>
+                                    
+                                    <Col md={2}>
+                                        <Button
+                                            className="w-100 fw-bold"
+                                            style={{
+                                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                                border: 'none',
+                                                padding: '0.6rem 1rem',
+                                                borderRadius: '8px'
+                                            }}
+                                            onClick={handleApplyFilters}
+                                            disabled={loading}
+                                        >
+                                            <FaSearch className="me-2" />
+                                            Apply
+                                        </Button>
+                                    </Col>
+                                </Row>
+                            </Card.Body>
+                        </Card>
 
                         {loading ? (
                             <div className="text-center p-5">
@@ -272,6 +362,7 @@ const ManageStudents = () => {
                                     <h3 className="mb-4 d-flex align-items-center">
                                         <span className="me-2">📋</span>
                                         Added Students
+                                        <Badge bg="secondary" className="ms-3">{students.length} Students</Badge>
                                     </h3>
 
                                     <Row xs={1} md={2} className="g-4">
@@ -288,7 +379,7 @@ const ManageStudents = () => {
                                                                     Student ID: {student.student_id}
                                                                 </Badge>
                                                                 {student.is_ir && (
-                                                                    <Badge bg="info" className="fs-6 me-2">
+                                                                    <Badge bg="info" className="fs-6 ms-2">
                                                                         IR_ST
                                                                     </Badge>
                                                                 )}
@@ -348,8 +439,14 @@ const ManageStudents = () => {
                                 </Card.Body>
                             </Card>
                         ) : (
-                            <div className="text-center text-gray-600 p-6 bg-gray-50 border-dashed border-2 border-gray-300 rounded-lg">
-                                <p>No students currently in the list.</p>
+                            <div className="text-center p-5">
+                                <div className="mb-3" style={{ fontSize: '3rem', opacity: 0.3 }}>📋</div>
+                                <h5 className="text-secondary mb-2">No Students Found</h5>
+                                <p className="text-muted">
+                                    {!appliedFilterLevel && appliedFilterIRStatus === '' 
+                                        ? 'Please select filters and click "Apply" to view students.'
+                                        : 'No students match the selected filters.'}
+                                </p>
                             </div>
                         )}
                     </Card.Body>

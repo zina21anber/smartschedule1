@@ -72,7 +72,10 @@ const ManageRules = () => {
 
     const fetchUserInfo = useCallback(() => {
         const storedUser = JSON.parse(localStorage.getItem('user')) || {};
-        if (storedUser.full_name && storedUser.role) {
+        // ✅ التصحيح: استخدام storedUser.name كأولوية
+        if (storedUser.name && storedUser.role) {
+            setUserInfo({ name: storedUser.name, role: storedUser.role });
+        } else if (storedUser.full_name && storedUser.role) {
             setUserInfo({ name: storedUser.full_name, role: storedUser.role });
         }
     }, []);

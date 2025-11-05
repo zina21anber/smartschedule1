@@ -329,7 +329,10 @@ const Dashboard = () => {
     setStatsError(null);
     try {
       const storedUser = JSON.parse(localStorage.getItem('user')) || {};
-      setUserInfo({ name: storedUser.name || 'Admin User', role: storedUser.role || 'Committee Head' });
+      const userName = storedUser.name || storedUser.full_name || 'Admin User';
+      const userRole = storedUser.role || 'Committee Head';
+      setUserInfo({ name: userName, role: userRole });
+
 
       const statsData = await fetchData('http://localhost:5000/api/statistics');
       const participationRate = statsData.totalStudents > 0 ? ((statsData.votingStudents / statsData.totalStudents) * 100).toFixed(1) : 0;
@@ -376,8 +379,9 @@ const Dashboard = () => {
               <Nav.Link onClick={() => navigate('/dashboard')} className="nav-link-custom active"><FaHome className="me-2" /> HOME</Nav.Link>
               <Nav.Link onClick={() => navigate('/manageSchedules')} className="nav-link-custom"><FaCalendarAlt className="me-2" /> Schedules</Nav.Link>
               <Nav.Link onClick={() => navigate('/managestudents')} className="nav-link-custom"><FaUsers className="me-2" /> Students</Nav.Link>
+              {/* ✅✅✅ إضافة رابط Course Information/addElective ✅✅✅ */}
+              <Nav.Link onClick={() => navigate('/addElective')} className="nav-link-custom"><FaBook className="me-2" /> Course Information</Nav.Link>
               <Nav.Link onClick={() => navigate('/managerules')} className="nav-link-custom"><FaBalanceScale className="me-2" /> Rules</Nav.Link>
-              {/* ✅✅✅ THE FIX IS HERE: ADDED THE MISSING LINK ✅✅✅ */}
               <Nav.Link onClick={() => navigate('/managenotifications')} className="nav-link-custom"><FaBell className="me-2" /> Notification</Nav.Link>
             </Nav>
             <div className="d-flex align-items-center ms-lg-4 mt-3 mt-lg-0">
@@ -421,4 +425,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

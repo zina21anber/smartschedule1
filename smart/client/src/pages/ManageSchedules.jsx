@@ -1,36 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Container, Row, Col, Card, Button, Alert, Spinner, Table, Form, ListGroup, Badge, Navbar, Nav } from 'react-bootstrap';
 import { FaArrowRight, FaFilter, FaCalendarAlt, FaSyncAlt, FaSave, FaCheckCircle, FaEdit, FaTrash, FaHome, FaUsers, FaBook, FaBalanceScale, FaBell, FaSignOutAlt } from 'react-icons/fa';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import '../App.css';
+import { scheduleAPI } from '../services/api'; 
 
-const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
+const daysOfWeek = ['S', 'M', 'T', 'W', 'H']; // S=Sunday, M=Monday, T=Tuesday, W=Wednesday, H=Thursday
 const timeSlots = [
     '08:00 - 09:00', '09:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00',
     '12:00 - 13:00', '13:00 - 14:00', '14:00 - 15:00',
 ];
 
-const fetchData = async (url, options = {}) => {
-    const token = localStorage.getItem('token');
-    const response = await fetch(url, {
-        headers: {
-            'Content-Type': 'application/json',
-            ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        ...options,
-    });
-    if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        throw new Error('AUTHENTICATION_FAILED');
-    }
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown Error' }));
-        throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
-    }
-    return response.json();
-};
 const NewCommitteeNavbar = ({ userInfo, navigate, activePath }) => (
+// ... (Navbar code remains the same) ...
     <Container fluid="lg" className="container-custom shadow-lg">
         <Navbar expand="lg" variant="dark" className="navbar-custom p-3">
             <Navbar.Brand className="fw-bold fs-5">ADMIN DASHBOARD</Navbar.Brand>
@@ -65,7 +47,12 @@ const ScheduleTable = ({ sections, loading }) => {
     }
 
     const scheduleData = sections.reduce((acc, section) => {
-        const timeIndex = timeSlots.findIndex(slot => slot.startsWith(section.start_time) && slot.endsWith(section.end_time));
+        const cleanStartTime = section.start_time ? section.start_time.substring(0, 5) : '';
+        const cleanEndTime = section.end_time ? section.end_time.substring(0, 5) : '';
+        
+        const timeSlotString = `${cleanStartTime} - ${cleanEndTime}`;
+        
+        const timeIndex = timeSlots.findIndex(slot => slot === timeSlotString);
         const dayIndex = daysOfWeek.findIndex(day => day === section.day_code);
 
         if (timeIndex !== -1 && dayIndex !== -1) {
@@ -81,14 +68,15 @@ const ScheduleTable = ({ sections, loading }) => {
                 <thead>
                     <tr>
                         <th className="time-col">Time Slot</th>
-                        {daysOfWeek.map(day => <th key={day}>{day}</th>)}
+                        {/* عرض أسماء الأيام الكاملة للتنسيق فقط */}
+                        {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'].map(day => <th key={day}>{day}</th>)}
                     </tr>
                 </thead>
                 <tbody>
                     {timeSlots.map((time, timeIndex) => (
                         <tr key={time}>
                             <td className="time-col fw-bold">{time}</td>
-                            {daysOfWeek.map((day, dayIndex) => (
+                            {daysOfWeek.map((dayCode, dayIndex) => (
                                 <td key={dayIndex} className={scheduleData[timeIndex][dayIndex] ? 'has-class' : ''}>
                                     {scheduleData[timeIndex][dayIndex] || '-'}
                                 </td>
@@ -101,42 +89,63 @@ const ScheduleTable = ({ sections, loading }) => {
     );
 };
 
-const MOCK_SCHEDULES = {
-    3: [
-        { id: 1, version: 'V1.0', is_active: true, sections: [{ course_id: 101, code: 'CS301', name: 'Intro', section_number: 1, start_time: '10:00', end_time: '11:00', day_code: 'Sunday', level: 3 }] },
-    ],
-};
-
-const MOCK_SECTIONS = [{ course_id: 101, code: 'CS301', course_name: 'Intro', section_number: 1, start_time: '10:00', end_time: '11:00', day_code: 'Sunday', level: 3 }];
-
-
 const ManageSchedules = () => {
-    const [selectedLevel, setSelectedLevel] = useState(3);
-    const [scheduleVersions, setScheduleVersions] = useState(MOCK_SCHEDULES);
-    const [currentSections, setCurrentSections] = useState(MOCK_SECTIONS);
+    const [selectedLevel, setSelectedLevel] = useState(4); 
+    const [scheduleVersions, setScheduleVersions] = useState({}); 
+    const [currentSections, setCurrentSections] = useState([]); 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const navigate = useNavigate();
+    const location = useLocation();
 
     const [userInfo, setUserInfo] = useState({ name: 'Committee Member', role: 'Load Committee' });
     const fetchUserInfo = useCallback(() => {
         const storedUser = JSON.parse(localStorage.getItem('user')) || {};
-        if (storedUser.full_name && storedUser.role) {
-            setUserInfo({ name: storedUser.full_name, role: storedUser.role });
+        if (storedUser.name && storedUser.role) {
+            setUserInfo({ name: storedUser.name, role: storedUser.role });
         }
     }, []);
 
     const fetchLevelData = useCallback(async (level) => {
         setLoading(true);
         setError(null);
+        setCurrentSections([]); 
+        
         try {
-            await new Promise(resolve => setTimeout(resolve, 500)); 
-            setCurrentSections(MOCK_SECTIONS.filter(s => s.level === level));
+            // 1. جلب الإصدارات
+            const versionsResponse = await scheduleAPI.getVersionsByLevel(level);
             
-            setScheduleVersions(prev => ({ ...prev, [level]: MOCK_SCHEDULES[level] || [] }));
+            const versions = versionsResponse.data.map(v => ({
+                id: v.id, 
+                version: v.version || `V${v.id}`,
+                is_active: v.is_active,
+            }));
+
+            setScheduleVersions(prev => ({ ...prev, [level]: versions || [] }));
+
+            // 2. البحث عن الإصدار النشط 
+            const activeVersion = versions.find(v => v.is_active);
+
+            if (versions.length === 0) {
+                setError(`No versions found for Level ${level}. Click "Generate New Schedule" to start.`);
+                return;
+            }
+
+            if (!activeVersion) {
+                // حالة: توجد إصدارات ولكن لا يوجد إصدار نشط
+                setError(`Level ${level} has versions, but none are active. Please activate one from the list.`);
+                return;
+            }
+
+            // 3. جلب الأقسام
+            const sectionsResponse = await scheduleAPI.getSectionsByLevel(level);
+            
+            const activeSections = sectionsResponse.data;
+            setCurrentSections(activeSections);
+
         } catch (e) {
-            setError('Failed to fetch schedules or sections. Please try again.');
-            console.error(e);
+            console.error('Fetch error:', e.response || e);
+            setError(e.response?.data?.error || e.response?.data?.message || `Request failed for Level ${level}. Status: ${e.response?.status || 'network error'}.`);
         } finally {
             setLoading(false);
         }
@@ -149,37 +158,66 @@ const ManageSchedules = () => {
     }, [selectedLevel, fetchUserInfo, fetchLevelData]);
 
 
-    const handleActivateVersion = (versionId) => {
-        setScheduleVersions(prev => ({
-            ...prev,
-            [selectedLevel]: prev[selectedLevel].map(v => ({
-                ...v,
-                is_active: v.id === versionId,
-            }))
-        }));
-        alert(`Version ${versionId} activated for Level ${selectedLevel}.`);
+    const handleActivateVersion = async (versionId) => {
+        try {
+            await scheduleAPI.activateVersion(versionId); 
+            setScheduleVersions(prev => ({
+                ...prev,
+                [selectedLevel]: prev[selectedLevel].map(v => ({
+                    ...v,
+                    is_active: v.id === versionId,
+                }))
+            }));
+            await fetchLevelData(selectedLevel); 
+            alert(`Version ${versionId} activated successfully. The schedule should now be updated.`);
+        } catch (e) {
+            setError(e.response?.data?.message || 'Failed to activate version.');
+        }
     };
 
-    const handleDeleteVersion = (versionId) => {
-        setScheduleVersions(prev => ({
-            ...prev,
-            [selectedLevel]: prev[selectedLevel].filter(v => v.id !== versionId)
-        }));
-        alert(`Version ${versionId} deleted for Level ${selectedLevel}.`);
+    const handleDeleteVersion = async (versionId) => {
+        if (!window.confirm('Are you sure you want to delete this version?')) return;
+        
+        try {
+            await scheduleAPI.deleteVersion(versionId); 
+            setScheduleVersions(prev => ({
+                ...prev,
+                [selectedLevel]: prev[selectedLevel].filter(v => v.id !== versionId)
+            }));
+            await fetchLevelData(selectedLevel); 
+            alert(`Version ${versionId} deleted successfully.`);
+        } catch (e) {
+            setError(e.response?.data?.message || 'Failed to delete version.');
+        }
     };
 
-    const handleGenerateSchedule = () => {
-        alert('Generating new schedule version (Mock AI Process)...');
+    // ✅ تحديث: استدعاء الـ API الجديد لتوليد الجدول الزمني
+    const handleGenerateSchedule = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await scheduleAPI.generateSchedule(selectedLevel);
+            
+            alert(`Success! ${response.data.message}`);
+
+            // إعادة جلب البيانات لتحديث قائمة الإصدارات
+            await fetchLevelData(selectedLevel);
+
+        } catch (e) {
+            console.error('Generation error:', e.response || e);
+            setError(e.response?.data?.error || 'Failed to generate schedule.');
+        } finally {
+            setLoading(false);
+        }
     };
+
 
     return (
         <div className="min-vh-100" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-            {/* ✅ استخدام الـ Navbar الموحد الجديد */}
-            <NewCommitteeNavbar userInfo={userInfo} navigate={navigate} activePath='/manageSchedules' />
+            <NewCommitteeNavbar userInfo={userInfo} navigate={navigate} activePath={location.pathname} />
 
             <Container fluid="lg" className="py-4">
                 <div className="page-content-wrapper">
-                    {/* ✅ توحيد ترويسة الصفحة الرئيسية */}
                     <Card className="shadow-lg border-0 mb-4" style={{ borderRadius: '20px', overflow: 'hidden' }}>
                         <Card.Header className="text-white text-start py-4" style={{ background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)' }}>
                             <h1 className="mb-2" style={{ fontSize: '2rem' }}>Schedule Management</h1>
@@ -187,12 +225,10 @@ const ManageSchedules = () => {
                                 View, compare, and activate scheduling versions across all academic levels.
                             </p>
                         </Card.Header>
-                        {/* ---------------------------------------------------- */}
 
                         <Card.Body className="p-4">
                             {error && <Alert variant="danger">{error}</Alert>}
                             
-                            {/* ✅ Controls Card Styling */}
                             <Card className="mb-4 shadow-sm" style={{ borderRadius: '12px' }}>
                                 <Card.Header className="bg-light"><h5 className="mb-0 d-flex align-items-center"><FaFilter className="me-2 text-primary" /> Filter Levels</h5></Card.Header>
                                 <Card.Body>
@@ -211,14 +247,12 @@ const ManageSchedules = () => {
                                             ))}
                                         </div>
                                     </Form.Group>
-                                    {/* ... (Student Count Form Group) ... */}
                                 </Card.Body>
                             </Card>
 
                             <Row className="g-4">
                                 <Col lg={9}>
                                     <Card className="shadow-sm h-100">
-                                        {/* ✅ Schedule Card Header Styling */}
                                         <Card.Header className="fw-bold d-flex justify-content-between align-items-center bg-light">
                                             <span className="fs-5"><FaCalendarAlt className="me-2 text-primary" /> Active Schedule - Level {selectedLevel}</span>
                                             <Button variant="success" onClick={handleGenerateSchedule} disabled={loading}>
@@ -227,15 +261,14 @@ const ManageSchedules = () => {
                                         </Card.Header>
                                         <Card.Body>
                                             <ScheduleTable sections={currentSections} loading={loading} />
-                                            {currentSections.length === 0 && !loading && (
-                                                <Alert variant="info" className="text-center mt-3">No active sections found for this level.</Alert>
+                                            {currentSections.length === 0 && !loading && !error && (
+                                                <Alert variant="info" className="text-center mt-3">No sections to display. Check the active version or generate a new one.</Alert>
                                             )}
                                         </Card.Body>
                                     </Card>
                                 </Col>
                                 <Col lg={3}>
                                     <Card className="shadow-sm h-100">
-                                        {/* ✅ Versions Card Header Styling */}
                                         <Card.Header className="fw-bold bg-light"><FaEdit className="me-2 text-primary" /> Schedule Versions</Card.Header>
                                         <Card.Body>
                                             <ScheduleVersions 
