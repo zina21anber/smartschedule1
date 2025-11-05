@@ -22,6 +22,19 @@ api.interceptors.request.use(
   }
 );
 
+// ✅ إضافة interceptor للاستجابة لمعالجة الأخطاء بشكل أفضل
+api.interceptors.response.use(
+  (response) => {
+    console.log('✅ [API Response]', response.config.url, '→', response.status);
+    return response;
+  },
+  (error) => {
+    console.error('❌ [API Error]', error.config?.url, '→', error.response?.status);
+    console.error('❌ [API Error Details]', error.response?.data);
+    return Promise.reject(error);
+  }
+);
+
 // Authentication API
 export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
@@ -31,15 +44,21 @@ export const authAPI = {
 
 // Student API
 export const studentAPI = {
-  getAll: () => api.get('/students'),
-  getById: (userId) => api.get(`/student/${userId}`)
+  getAll: (options = {}) => api.get('/students', options),
+  getById: (userId) => api.get(`/student/${userId}`),
+  create: (data) => api.post('/auth/register-student', data),
+  update: (studentId, data) => api.put(`/students/${studentId}`, data),
+  delete: (studentId) => api.delete(`/students/${studentId}`)
 };
 
 // Course API
 export const courseAPI = {
-  getAll: () => api.get('/courses'),
+  getAll: (options = {}) => api.get('/courses', options),
+  getByLevel: (level) => api.get(`/courses/level/${level}`), 
   getElective: () => api.get('/courses/elective'),
-  create: (data) => api.post('/courses', data)
+  create: (data) => api.post('/courses', data),
+  getCourseDetails: (courseId) => api.get(`/courses/${courseId}`),
+  updateTimeSlots: (courseId, data) => api.patch(`/courses/${courseId}/timeslots`, data),
 };
 
 // Voting API
@@ -48,22 +67,39 @@ export const voteAPI = {
   getVotesByCourse: (courseId) => api.get(`/votes/course/${courseId}`)
 };
 
-// Schedule API
-export const scheduleAPI = {
-  getAll: () => api.get('/schedules'),
-  create: (data) => api.post('/schedules', data)
+// ✅ Comments API - النسخة المُحسّنة مع Logging
+export const commentsAPI = {
+  // مسار لجلب كل التعليقات (بدون فلترة)
+  getAllComments: () => {
+    console.log('📡 [commentsAPI] Calling: GET /comments/all');
+    return api.get('/comments/all');
+  },
+  
+  // مسار لجلب التعليقات حسب المستوى (للتصفية في ManageNotifications)
+  getCommentsByLevel: (level) => {
+    console.log('📡 [commentsAPI] Calling: GET /comments/level/' + level);
+    if (!level || level === '' || level === 'undefined' || level === 'null') {
+      console.warn('⚠️ [commentsAPI] Invalid level provided, falling back to getAllComments');
+      return commentsAPI.getAllComments();
+    }
+    return api.get(`/comments/level/${level}`);
+  },
 };
 
-// Section API
-export const sectionAPI = {
-  getAll: () => api.get('/sections')
+// Schedule & Section API
+export const scheduleAPI = {
+  getAll: () => api.get('/schedules'),
+  create: (data) => api.post('/schedules', data),
+  getSectionsByLevel: (level) => api.get(`/sections?level=${level}`),
+  getVersionsByLevel: (level) => api.get(`/schedules/versions?level=${level}`),
+  generateSchedule: (level) => api.post('/schedules/generate', { level }),
+  activateVersion: (versionId) => api.put(`/schedules/versions/activate/${versionId}`),
+  deleteVersion: (versionId) => api.delete(`/schedules/versions/${versionId}`),
 };
 
 // Statistics API
 export const statisticsAPI = {
   get: () => api.get('/statistics')
 };
-
-
 
 export default api;
